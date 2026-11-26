@@ -41,6 +41,32 @@ export async function GET() {
   );
 }
 
+/** POST /api/publishers/me — create the company profile for an account that
+ *  has publisher access (an admin promoted it, or the role was set manually)
+ *  but no profile yet. Only allowed once; the profile starts PENDING. */
+export async function POST(req: NextRequest) {
+  const { user, res } = await auth(["PUBLISHER"]);
+  if (res) return res;
+  const existing = await db.publisher.findUnique({ where: { userId: user!.id } });
+  if (existing) return bad("You already have a publisher profile.");
+
+  const body = await req.json();
+  const companyName = String(body.companyName || "").trim();
+  if (companyName.length < 2) return bad("Please enter the company or publication name.");
+
+  const created = await db.publisher.create({
+    data: {
+      userId: user!.id,
+      companyName,
+      contactEmail: String(body.contactEmail || user!.email || "").toLowerCase().trim(),
+      about: body.about ? String(body.about).trim() || null : null,
+      logoImageId: body.logoImageId ? String(body.logoImageId) : null,
+      status: "PENDING",
+    },
+  });
+  return ok({ id: created.id, status: created.status });
+}
+
 /** PATCH /api/publishers/me — update the company profile. */
 export async function PATCH(req: NextRequest) {
   const { user, res } = await auth(["PUBLISHER"]);

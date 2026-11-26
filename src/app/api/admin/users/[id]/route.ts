@@ -21,15 +21,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (admins >= 10) return bad("There are already 10 admins — demote one before promoting another.");
   }
 
-  const target = await db.user.findUnique({ where: { id } });
+  const target = await db.user.findUnique({ where: { id }, include: { publisher: true } });
   if (!target) return bad("Account not found.", 404);
 
   await db.user.update({ where: { id }, data: { role } });
+
+  // Becoming a publisher takes more than a role flip: every publisher list in
+  // the admin console comes from the Publisher profile row, so create a
+  // pending profile when the promoted account doesn't have one yet.
+  if (role === "PUBLISHER" && !target.publisher) {
+    await db.publisher.create({
+      data: {
+        userId: id,
+        companyName: target.name,
+        contactEmail: target.email,
+        status: "PENDING",
+      },
+    });
+  }
+
   await db.notification.create({
     data: {
       userId: id,
       title: "Your account role changed",
-      body: `An administrator set your account role to ${role}.`,
+      body:
+        role === "PUBLISHER"
+          ? "An administrator made your account a publisher. Sign out and sign back in to see the Publish tab, then check your company profile."
+          : `An administrator set your account role to ${role}. Sign out and sign back in for it to take effect.`,
     },
   });
   return ok({ updated: true });

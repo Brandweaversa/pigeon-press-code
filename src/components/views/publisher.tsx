@@ -51,6 +51,7 @@ export function PublisherView() {
   const [editionsMag, setEditionsMag] = useState<MyMag | null>(null);
   const [deleteMag, setDeleteMag] = useState<MyMag | null>(null);
   const [editCompany, setEditCompany] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(true);
 
   const enabled = !!session?.user && (session.user as { role?: string }).role === "PUBLISHER";
 
@@ -74,12 +75,15 @@ export function PublisherView() {
   if (isLoading) return <div className="h-64 animate-pulse rounded-2xl bg-muted" />;
   if (!me) {
     return (
-      <EmptyState
-        icon={<Building2 className="h-6 w-6" />}
-        title="No publisher profile yet"
-        hint="Register a company or publication first — your account can hold as many magazines as you like."
-        action={<Button onClick={() => push({ name: "auth" })}>Register as publisher</Button>}
-      />
+      <>
+        <EmptyState
+          icon={<Building2 className="h-6 w-6" />}
+          title="Set up your publisher profile"
+          hint="Your account has publisher access but no company profile yet. Add your company or publication details — once the platform team approves, your magazines go live."
+          action={<Button onClick={() => setSetupOpen(true)}>Set up profile</Button>}
+        />
+        <PublisherSetup open={setupOpen} onClose={() => setSetupOpen(false)} />
+      </>
     );
   }
 
@@ -226,6 +230,69 @@ export function PublisherView() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/* ---------------- first-time publisher setup (promoted accounts) ---------------- */
+
+function PublisherSetup({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [companyName, setCompanyName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [about, setAbout] = useState("");
+  const [logoId, setLogoId] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const create = async () => {
+    setBusy(true);
+    try {
+      await withBusy("Creating profile…", () =>
+        post("/api/publishers/me", { companyName, contactEmail, about, logoImageId: logoId || null })
+      );
+      toast.success("Publisher profile created — awaiting platform approval.");
+      qc.invalidateQueries({ queryKey: ["publisher-me"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Set up your publisher profile</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Company / publication name</Label>
+            <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="e.g. Coast Media (Pty) Ltd" className="bg-white" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Contact email</Label>
+            <Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="Shown on your magazine pages (optional)" className="bg-white" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>About</Label>
+            <Textarea value={about} onChange={(e) => setAbout(e.target.value)} placeholder="Short bio — what do you publish? (optional)" className="bg-white min-h-[72px]" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Logo (transparent PNG, max 2 MB)</Label>
+            <div className="flex items-center gap-3">
+              <UploadButton kind="company-logo" accept="image/png" label={logoId ? "Replace logo" : "Upload logo"} onUploaded={(r) => setLogoId(r.id)} />
+              {logoId ? <img src={imgSrc(logoId)} alt="logo" className="h-10 w-10 object-contain" /> : null}
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Later</Button>
+          <Button onClick={create} disabled={busy || companyName.trim().length < 2}>
+            {busy ? "Saving…" : "Create profile"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
