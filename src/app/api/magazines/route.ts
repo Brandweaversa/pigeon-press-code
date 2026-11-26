@@ -1,74 +1,76 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { auth, ok, bad, isHttpUrl } from "@/lib/api-helpers";
+import { auth, ok, bad } from "@/lib/api-helpers";
 
-/** GET /api/magazines — public discovery list with filters.
- *  ?scope=mine (publisher's own, any status) | ?scope=public (default, APPROVED only)
- *  ?q= search, ?categoryId=, ?featured=1 */
+/** GET /api/magazines — magazine catalogue.
+ *  ?scope=mine   → the signed-in publisher's own magazines
+ *  ?scope=all    → admin only: every magazine with publisher info
+ *  default       → public: magazines from APPROVED publishers, featured first
+ *  ?q= search by name, ?categoryId= filter */
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const scope = sp.get("scope") || "public";
   const q = sp.get("q")?.trim() || "";
   const categoryId = sp.get("categoryId") || "";
-  const featured = sp.get("featured") === "1";
 
   const where: Record<string, unknown> = {};
+  let viewerId: string | null = null;
+  let favourites: Set<string> | null = null;
+
   if (scope === "mine") {
     const { user, res } = await auth(["PUBLISHER", "ADMIN"]);
     if (res) return res;
     const pub = await db.publisher.findUnique({ where: { userId: user!.id } });
     if (!pub) return ok([]);
     where.publisherId = pub.id;
+  } else if (scope === "all") {
+    const { res } = await auth(["ADMIN"]);
+    if (res) return res;
   } else {
-    where.status = "APPROVED";
-    if (featured) where.featured = true;
+    // public: only content from approved publishers is visible
+    where.publisher = { status: "APPROVED" };
+    const session = await auth();
+    if (!session.res && session.user) {
+      viewerId = session.user.id;
+      const favs = await db.favourite.findMany({ where: { userId: viewerId } });
+      favourites = new Set(favs.map((f) => f.magazineId));
+    }
   }
-  if (q) where.title = { contains: q };
+  if (q) where.name = { contains: q };
   if (categoryId) where.categoryId = categoryId;
 
   const list = await db.magazine.findMany({
     where,
     include: {
       category: true,
-      publisher: { select: { companyName: true, logoImageId: true } },
-      editions: where.status === "APPROVED" || scope !== "mine"
-        ? { where: { status: "APPROVED" }, orderBy: { publishedAt: "desc" }, take: 1 }
-        : { orderBy: { createdAt: "desc" }, take: 1 },
+      publisher: { select: { id: true, companyName: true, logoImageId: true } },
+      editions: { orderBy: [{ sortOrder: "asc" }, { publishedAt: "desc" }], take: 1 },
       _count: { select: { editions: true, favourites: true } },
     },
-    orderBy: [{ featured: "desc" }, { updatedAt: "desc" }],
-    take: 100,
+    orderBy: scope === "public" ? [{ featured: "desc" }, { createdAt: "desc" }] : { createdAt: "desc" },
+    take: 200,
   });
-
-  // hide owner-only details for non-owners
-  let favourites: Set<string> | null = null;
-  if (scope === "public") {
-    const session = await auth();
-    if (!session.res && session.user) {
-      const favs = await db.favourite.findMany({ where: { userId: session.user.id } });
-      favourites = new Set(favs.map((f) => f.magazineId));
-    }
-  }
 
   return ok(
     list.map((m) => ({
       id: m.id,
-      title: m.title,
+      name: m.name,
       description: m.description,
-      status: m.status,
-      featured: m.featured,
-      rejectionReason: scope === "mine" ? m.rejectionReason : undefined,
-      coverImageId: m.coverImageId,
-      flipbookUrl: m.flipbookUrl,
-      language: m.language,
+      logoImageId: m.logoImageId,
       frequency: m.frequency,
-      website: m.website,
+      featured: m.featured,
       createdAt: m.createdAt,
       updatedAt: m.updatedAt,
       category: m.category ? { id: m.category.id, name: m.category.name, slug: m.category.slug } : null,
       publisher: m.publisher,
       latestEdition: m.editions[0]
-        ? { id: m.editions[0].id, title: m.editions[0].title, issueNumber: m.editions[0].issueNumber, publishedAt: m.editions[0].publishedAt }
+        ? {
+            id: m.editions[0].id,
+            title: m.editions[0].title,
+            issueNumber: m.editions[0].issueNumber,
+            thumbnailImageId: m.editions[0].thumbnailImageId,
+            publishedAt: m.editions[0].publishedAt,
+          }
         : null,
       editionsCount: m._count.editions,
       readers: m._count.favourites,
@@ -77,7 +79,7 @@ export async function GET(req: NextRequest) {
   );
 }
 
-/** POST /api/magazines — create a draft magazine (approved publishers only). */
+/** POST /api/magazines — create a magazine (approved publishers only; live immediately). */
 export async function POST(req: NextRequest) {
   const { user, res } = await auth(["PUBLISHER", "ADMIN"]);
   if (res) return res;
@@ -90,12 +92,10 @@ export async function POST(req: NextRequest) {
     return bad("Your publisher account must be approved before creating magazines.", 403);
 
   const body = await req.json();
-  const title = String(body.title || "").trim();
-  const coverImageId = String(body.coverImageId || "");
-  const flipbookUrl = String(body.flipbookUrl || "").trim();
-  if (title.length < 2) return bad("Please enter the magazine title.");
-  if (!coverImageId) return bad("Please upload a cover image.");
-  if (!isHttpUrl(flipbookUrl)) return bad("The flipbook URL must be a valid http(s) link.");
+  const name = String(body.name || "").trim();
+  const logoImageId = String(body.logoImageId || "");
+  if (name.length < 2) return bad("Please enter the magazine name.");
+  if (!logoImageId) return bad("Please upload the magazine logo.");
 
   if (body.categoryId) {
     const cat = await db.category.findUnique({ where: { id: String(body.categoryId) } });
@@ -105,15 +105,11 @@ export async function POST(req: NextRequest) {
   const mag = await db.magazine.create({
     data: {
       publisherId: pub.id,
-      title,
+      name,
       description: String(body.description || "").trim() || null,
       categoryId: body.categoryId ? String(body.categoryId) : null,
-      coverImageId,
-      flipbookUrl,
-      language: String(body.language || "English"),
+      logoImageId,
       frequency: String(body.frequency || "").trim() || null,
-      website: String(body.website || "").trim() || null,
-      status: "DRAFT",
     },
   });
   return ok({ id: mag.id }, 201);

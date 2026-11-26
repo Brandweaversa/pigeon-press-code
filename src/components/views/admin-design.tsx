@@ -1,9 +1,9 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Palette, Type, Image as ImageIcon, MonitorSmartphone } from "lucide-react";
-import { api, put } from "@/lib/api";
+import { put } from "@/lib/api";
 import { useLiveSettings } from "@/components/use-live-settings";
 import { UploadButton } from "@/components/upload-button";
 import { imgSrc } from "@/components/shared";
@@ -85,9 +85,10 @@ export function DesignConsole() {
         </Field>
         <Field label="Splash logo">
           <div className="flex items-center gap-3">
-            <UploadButton kind="logo" accept="image/png" label={settings.splash_logo_id ? "Replace logo" : "Upload logo (transparent PNG)"} onUploaded={(r) => save.mutate({ splash_logo_id: r.id })} />
+            <UploadButton kind="brand-logo" accept="image/png" label={settings.splash_logo_id ? "Replace logo" : "Upload logo (transparent PNG)"} onUploaded={(r) => save.mutate({ splash_logo_id: r.id })} />
             {settings.splash_logo_id ? <img src={imgSrc(settings.splash_logo_id)} alt="splash logo" className="h-10 w-10 object-contain" /> : <span className="text-xs text-black/45">Using built-in mark</span>}
           </div>
+          <p className="mt-1 text-[11px] text-black/45">Shown alone on the splash screen — no text, just your logo.</p>
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Logo size">
@@ -117,7 +118,7 @@ export function DesignConsole() {
       <Card title="Header logo" icon={<ImageIcon className="h-4 w-4" />}>
         <Field label="Header logo (transparent PNG)">
           <div className="flex items-center gap-3">
-            <UploadButton kind="logo" accept="image/png" label={settings.header_logo_id ? "Replace logo" : "Upload logo"} onUploaded={(r) => save.mutate({ header_logo_id: r.id })} />
+            <UploadButton kind="brand-logo" accept="image/png" label={settings.header_logo_id ? "Replace logo" : "Upload logo"} onUploaded={(r) => save.mutate({ header_logo_id: r.id })} />
             <div className="glass rounded-lg px-3 py-1.5 ring-1 ring-black/5">
               <img src={imgSrc(settings.header_logo_id, "/icons/logo-mark.png")} alt="header logo" className="object-contain" style={{ height: settings.header_logo_size === "small" ? 18 : settings.header_logo_size === "large" ? 32 : 24 }} />
             </div>

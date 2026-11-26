@@ -4,7 +4,7 @@ import { create } from "zustand";
 
 export type ViewName =
   | "discover"
-  | "browse"
+  | "magazines"
   | "saved"
   | "alerts"
   | "profile"
@@ -12,6 +12,7 @@ export type ViewName =
   | "admin"
   | "auth"
   | "magazine"
+  | "edition"
   | "page";
 
 export type View = { name: ViewName; params?: Record<string, string> };

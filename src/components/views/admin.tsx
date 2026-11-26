@@ -5,7 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ShieldCheck, Check, X, Star, Plus, FileText, Users, BookOpen, Layers, Settings2, Trash2, Pencil } from "lucide-react";
 import { api, post, put, patch, del } from "@/lib/api";
-import { imgSrc, SectionTitle, StatusBadge, EmptyState, fmtDate } from "@/components/shared";
+import { imgSrc, SectionTitle, EmptyState, fmtDate } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,28 +16,29 @@ import { DesignConsole } from "@/components/views/admin-design";
 
 type Queue = {
   publishers: { id: string; companyName: string; contactEmail: string; about?: string | null; logoImageId?: string | null; email: string; createdAt: string }[];
-  magazines: { id: string; title: string; description?: string | null; coverImageId: string; flipbookUrl: string; frequency?: string | null; publisher: string; category?: string | null; updatedAt: string }[];
-  editions: { id: string; title: string; issueNumber?: string | null; flipbookUrl: string; magazineTitle: string; publisher: string; createdAt: string }[];
-  stats: { publishers: number; magazines: number; approvedEditions: number; readers: number; users: number };
+  stats: { publishers: number; magazines: number; editions: number; readers: number; users: number };
 };
 
 type Cat = { id: string; name: string; slug: string; sortOrder: number; magazines: number };
-type AdminMag = { id: string; title: string; status: string; featured: boolean; coverImageId: string; publisher?: { companyName: string } | null };
+type AdminMag = {
+  id: string; name: string; logoImageId: string; featured: boolean; editionsCount?: number;
+  publisher?: { id?: string; companyName: string } | null;
+};
 type PageRow = { slug: string; title: string; content: string; updatedAt: string };
 
 export function AdminView() {
   const qc = useQueryClient();
-  const [rejectTarget, setRejectTarget] = useState<{ type: string; id: string; title: string } | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<{ id: string; title: string } | null>(null);
 
   const { data: q, isLoading } = useQuery({ queryKey: ["admin-queue"], queryFn: () => api<Queue>("/api/admin/queue") });
   const { data: cats } = useQuery({ queryKey: ["categories"], queryFn: () => api<Cat[]>("/api/categories") });
-  const { data: allMags } = useQuery({ queryKey: ["magazines", "admin-all"], queryFn: () => api<AdminMag[]>("/api/magazines?scope=mine") });
+  const { data: allMags } = useQuery({ queryKey: ["magazines", "admin-all"], queryFn: () => api<AdminMag[]>("/api/magazines?scope=all") });
 
   const review = useMutation({
     mutationFn: (b: { type: string; id: string; action: string; reason?: string }) => post("/api/admin/review", b),
     onSuccess: (_r, b) => {
       toast.success(
-        b.action === "approve" ? "Approved." : b.action === "reject" ? "Rejected with reason." : b.action === "feature" ? "Featured on Discover." : "Removed from featured."
+        b.action === "approve" ? "Publisher approved — their content is now live." : b.action === "reject" ? "Rejected with reason." : b.action === "feature" ? "Featured on the Magazines catalogue." : "Removed from featured."
       );
       qc.invalidateQueries({ queryKey: ["admin-queue"] });
       qc.invalidateQueries({ queryKey: ["magazines"] });
@@ -51,7 +52,7 @@ export function AdminView() {
 
   return (
     <div className="space-y-6">
-      <SectionTitle sub="Review submissions, curate the shelf and tune the platform">Admin console</SectionTitle>
+      <SectionTitle sub="Approve publishers, curate the catalogue and tune the platform">Admin console</SectionTitle>
 
       {/* stats */}
       {stats && (
@@ -59,7 +60,7 @@ export function AdminView() {
           {[
             { label: "Publishers", value: stats.publishers, icon: Users },
             { label: "Magazines", value: stats.magazines, icon: BookOpen },
-            { label: "Live editions", value: stats.approvedEditions, icon: Layers },
+            { label: "Editions", value: stats.editions, icon: Layers },
             { label: "Registered readers", value: stats.readers, icon: Users },
             { label: "All accounts", value: stats.users, icon: ShieldCheck },
           ].map((s) => (
@@ -75,16 +76,19 @@ export function AdminView() {
       <Tabs defaultValue="approvals">
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="approvals" className="gap-1.5">
-            Approvals {q && (q.publishers.length + q.magazines.length + q.editions.length > 0) ? `(${q.publishers.length + q.magazines.length + q.editions.length})` : ""}
+            Approvals {q && q.publishers.length > 0 ? `(${q.publishers.length})` : ""}
           </TabsTrigger>
-          <TabsTrigger value="feature">Feature</TabsTrigger>
+          <TabsTrigger value="magazines">Magazines</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
           <TabsTrigger value="design" className="gap-1.5"><Settings2 className="h-3.5 w-3.5" /> Design</TabsTrigger>
           <TabsTrigger value="pages">Legal pages</TabsTrigger>
         </TabsList>
 
-        {/* ------- approvals ------- */}
-        <TabsContent value="approvals" className="space-y-6">
+        {/* ------- approvals: publishers only ------- */}
+        <TabsContent value="approvals" className="space-y-4">
+          <p className="text-sm text-black/55">
+            Approved publishers publish magazines and editions instantly — only publisher registrations need review.
+          </p>
           <section>
             <h3 className="mb-2 font-bold text-black">Publisher registrations</h3>
             {!q || q.publishers.length === 0 ? (
@@ -102,58 +106,7 @@ export function AdminView() {
                   <Button size="sm" className="gap-1 bg-emerald-700 hover:bg-emerald-800" onClick={() => review.mutate({ type: "publisher", id: p.id, action: "approve" })}>
                     <Check className="h-4 w-4" /> Approve
                   </Button>
-                  <Button size="sm" variant="outline" className="gap-1 text-red-700" onClick={() => setRejectTarget({ type: "publisher", id: p.id, title: p.companyName })}>
-                    <X className="h-4 w-4" /> Reject
-                  </Button>
-                </div>
-              ))
-            )}
-          </section>
-
-          <section>
-            <h3 className="mb-2 font-bold text-black">Magazines awaiting review</h3>
-            {!q || q.magazines.length === 0 ? (
-              <p className="text-sm text-black/50">Nothing pending.</p>
-            ) : (
-              q.magazines.map((m) => (
-                <div key={m.id} className="mb-2 flex items-center gap-3 rounded-2xl bg-white/85 p-4 ring-1 ring-black/5">
-                  <div className="a4 w-11 shrink-0 overflow-hidden rounded-md ring-1 ring-black/10">
-                    <img src={imgSrc(m.coverImageId, "/icons/icon-192.png")} alt="" className="h-full w-full object-cover" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-black">{m.title}</p>
-                    <p className="truncate text-xs text-black/55">
-                      {m.publisher} · {m.category || "No category"}{m.frequency ? ` · ${m.frequency}` : ""} · submitted {fmtDate(m.updatedAt)}
-                    </p>
-                  </div>
-                  <Button size="sm" className="gap-1 bg-emerald-700 hover:bg-emerald-800" onClick={() => review.mutate({ type: "magazine", id: m.id, action: "approve" })}>
-                    <Check className="h-4 w-4" /> Approve
-                  </Button>
-                  <Button size="sm" variant="outline" className="gap-1 text-red-700" onClick={() => setRejectTarget({ type: "magazine", id: m.id, title: m.title })}>
-                    <X className="h-4 w-4" /> Reject
-                  </Button>
-                </div>
-              ))
-            )}
-          </section>
-
-          <section>
-            <h3 className="mb-2 font-bold text-black">Editions awaiting review</h3>
-            {!q || q.editions.length === 0 ? (
-              <p className="text-sm text-black/50">Nothing pending.</p>
-            ) : (
-              q.editions.map((e) => (
-                <div key={e.id} className="mb-2 flex items-center gap-3 rounded-2xl bg-white/85 p-4 ring-1 ring-black/5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-black">
-                      {e.title} {e.issueNumber ? <span className="font-normal text-black/45">· {e.issueNumber}</span> : null}
-                    </p>
-                    <p className="truncate text-xs text-black/55">{e.magazineTitle} · {e.publisher}</p>
-                  </div>
-                  <Button size="sm" className="gap-1 bg-emerald-700 hover:bg-emerald-800" onClick={() => review.mutate({ type: "edition", id: e.id, action: "approve" })}>
-                    <Check className="h-4 w-4" /> Approve & notify
-                  </Button>
-                  <Button size="sm" variant="outline" className="gap-1 text-red-700" onClick={() => setRejectTarget({ type: "edition", id: e.id, title: e.title })}>
+                  <Button size="sm" variant="outline" className="gap-1 text-red-700" onClick={() => setRejectTarget({ id: p.id, title: p.companyName })}>
                     <X className="h-4 w-4" /> Reject
                   </Button>
                 </div>
@@ -162,20 +115,23 @@ export function AdminView() {
           </section>
         </TabsContent>
 
-        {/* ------- feature ------- */}
-        <TabsContent value="feature">
+        {/* ------- magazines: feature management (all publishers) ------- */}
+        <TabsContent value="magazines">
           {!allMags || allMags.length === 0 ? (
-            <EmptyState icon={<Star className="h-6 w-6" />} title="No approved magazines yet" hint="Approved magazines can be featured on the Discover page." />
+            <EmptyState icon={<Star className="h-6 w-6" />} title="No magazines yet" hint="Magazines appear here as soon as approved publishers create them." />
           ) : (
             <ul className="space-y-2">
-              {allMags.filter((m) => m.status === "APPROVED").map((m) => (
+              {allMags.map((m) => (
                 <li key={m.id} className="flex items-center gap-3 rounded-2xl bg-white/85 p-3 ring-1 ring-black/5">
-                  <div className="a4 w-10 shrink-0 overflow-hidden rounded-md ring-1 ring-black/10">
-                    <img src={imgSrc(m.coverImageId, "/icons/icon-192.png")} alt="" className="h-full w-full object-cover" />
+                  <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-muted/60 ring-1 ring-black/10">
+                    <img src={imgSrc(m.logoImageId, "/icons/icon-192.png")} alt="" className="h-full w-full object-contain" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-black">{m.title}</p>
-                    <p className="truncate text-xs text-black/50">{m.publisher?.companyName}</p>
+                    <p className="truncate font-semibold text-black">{m.name}</p>
+                    <p className="truncate text-xs text-black/50">
+                      {m.publisher?.companyName || "Unknown publisher"}
+                      {m.editionsCount !== undefined ? ` · ${m.editionsCount} edition${m.editionsCount === 1 ? "" : "s"}` : ""}
+                    </p>
                   </div>
                   <Button
                     size="sm"
@@ -207,14 +163,14 @@ export function AdminView() {
         </TabsContent>
       </Tabs>
 
-      <RejectDialog target={rejectTarget} onClose={() => setRejectTarget(null)} onConfirm={(reason) => review.mutate({ type: rejectTarget!.type, id: rejectTarget!.id, action: "reject", reason })} />
+      <RejectDialog target={rejectTarget} onClose={() => setRejectTarget(null)} onConfirm={(reason) => review.mutate({ type: "publisher", id: rejectTarget!.id, action: "reject", reason })} />
     </div>
   );
 }
 
 function RejectDialog({
   target, onClose, onConfirm,
-}: { target: { type: string; id: string; title: string } | null; onClose: () => void; onConfirm: (reason: string) => void }) {
+}: { target: { id: string; title: string } | null; onClose: () => void; onConfirm: (reason: string) => void }) {
   const [reason, setReason] = useState("");
   return (
     <Dialog open={!!target} onOpenChange={(v) => { if (!v) { setReason(""); onClose(); } }}>
@@ -224,7 +180,7 @@ function RejectDialog({
         </DialogHeader>
         <div className="space-y-1.5">
           <Label>Reason sent to the publisher</Label>
-          <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Cover image is not the publication's own property." className="bg-white" />
+          <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. We could not verify your publication details." className="bg-white" />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>

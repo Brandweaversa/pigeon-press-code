@@ -12,7 +12,8 @@ export type SessionUser = {
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
-  secret: process.env.NEXTAUTH_SECRET || "pigeon-press-dev-secret",
+  // Fail loudly when the secret is missing — never fall back to a hardcoded value.
+  secret: process.env.NEXTAUTH_SECRET,
   pages: {},
   providers: [
     Credentials({
@@ -36,9 +37,10 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = (user as { id: string }).id;
-        token.role = (user as { role: string }).role;
-        token.name = user.name;
+        const u = user as unknown as { id?: string; role?: string; name?: string };
+        token.id = u.id || "";
+        token.role = u.role || "READER";
+        token.name = u.name || token.name;
       }
       return token;
     },

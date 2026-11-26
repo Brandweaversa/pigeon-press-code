@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /** Uploads an image to /api/images and reports the new image id.
- *  Enforces the 2MB limit client-side and warns about non-A4 covers. */
+ *  Enforces the 2MB limit client-side. */
 export function UploadButton({
   kind,
   label = "Upload image",
@@ -36,9 +36,6 @@ export function UploadButton({
     setBusy(true);
     try {
       const r = await uploadImage(file, kind);
-      if (r.ratioWarning) {
-        toast.warning("Cover ratio differs from the magazine (A4) ratio — it will be cropped to fit.");
-      }
       onUploaded({ id: r.id, url: r.url });
       toast.success("Image uploaded.");
     } catch (e) {

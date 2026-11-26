@@ -4,8 +4,9 @@ import { useSession } from "next-auth/react";
 import { useApp } from "@/lib/store";
 import { AppShell } from "@/components/app-shell";
 import { DiscoverView } from "@/components/views/discover";
-import { BrowseView } from "@/components/views/browse";
+import { MagazinesView } from "@/components/views/magazines";
 import { MagazineView } from "@/components/views/magazine";
+import { EditionView } from "@/components/views/edition";
 import { AuthView } from "@/components/views/auth-view";
 import { PublisherView } from "@/components/views/publisher";
 import { AdminView } from "@/components/views/admin";
@@ -17,8 +18,8 @@ function CurrentView() {
   switch (current.name) {
     case "discover":
       return <DiscoverView />;
-    case "browse":
-      return <BrowseView />;
+    case "magazines":
+      return <MagazinesView />;
     case "saved":
       return <SavedView />;
     case "alerts":
@@ -33,6 +34,8 @@ function CurrentView() {
       return <AdminView />;
     case "magazine":
       return <MagazineView id={current.params?.id || ""} />;
+    case "edition":
+      return <EditionView id={current.params?.id || ""} />;
     case "page":
       return <StaticPageView slug={current.params?.slug || "terms"} title={current.params?.title} />;
     default:

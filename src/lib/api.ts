@@ -31,12 +31,12 @@ export const put = <T,>(path: string, body: unknown) =>
   api<T>(path, { method: "PUT", body: JSON.stringify(body) });
 export const del = <T,>(path: string) => api<T>(path, { method: "DELETE" });
 
-/** Upload an image; returns { id, url, width?, height?, ratioWarning }. */
+/** Upload an image; returns { id, url, width?, height? }. */
 export async function uploadImage(file: File, kind: string) {
   const form = new FormData();
   form.append("file", file);
   form.append("kind", kind);
-  return api<{ id: string; url: string; width?: number; height?: number; ratioWarning?: boolean }>(
+  return api<{ id: string; url: string; width?: number; height?: number }>(
     "/api/images",
     { method: "POST", body: form }
   );

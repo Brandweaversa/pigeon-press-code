@@ -31,10 +31,10 @@ export function ProfileView() {
         <p className="text-sm text-black/55">Sign in to save favourites, get alerts, or publish your own magazines.</p>
         <Button className="w-full" onClick={() => push({ name: "auth" })}>Sign in or create account</Button>
         <div className="grid grid-cols-2 gap-2 pt-2">
-          <Button variant="outline" className="gap-2" onClick={() => push({ name: "page", params: { slug: "terms", title: terms?.title } })}>
+          <Button variant="outline" className="gap-2" onClick={() => push({ name: "page", params: { slug: "terms", title: terms?.title || "Terms" } })}>
             <FileText className="h-4 w-4" /> Terms
           </Button>
-          <Button variant="outline" className="gap-2" onClick={() => push({ name: "page", params: { slug: "privacy", title: privacy?.title } })}>
+          <Button variant="outline" className="gap-2" onClick={() => push({ name: "page", params: { slug: "privacy", title: privacy?.title || "Privacy" } })}>
             <Shield className="h-4 w-4" /> Privacy
           </Button>
         </div>
@@ -79,7 +79,7 @@ export function ProfileView() {
           </button>
         )}
         <button
-          onClick={() => push({ name: "page", params: { slug: "terms", title: terms?.title } })}
+          onClick={() => push({ name: "page", params: { slug: "terms", title: terms?.title || "Terms" } })}
           className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left hover:bg-black/5"
         >
           <FileText className="h-5 w-5 text-black/60" />
@@ -87,7 +87,7 @@ export function ProfileView() {
           <span className="text-xs text-black/40">{terms ? `updated ${fmtDate(terms.updatedAt)}` : ""}</span>
         </button>
         <button
-          onClick={() => push({ name: "page", params: { slug: "privacy", title: privacy?.title } })}
+          onClick={() => push({ name: "page", params: { slug: "privacy", title: privacy?.title || "Privacy" } })}
           className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left hover:bg-black/5"
         >
           <Shield className="h-5 w-5 text-black/60" />

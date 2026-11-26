@@ -3,17 +3,17 @@
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Compass, LayoutGrid, Bookmark, Bell, UserRound, BookOpenText, ShieldCheck, X, ChevronLeft } from "lucide-react";
+import { Compass, LibraryBig, Bookmark, Bell, UserRound, BookOpenText, ShieldCheck, X, ChevronLeft } from "lucide-react";
 import { api } from "@/lib/api";
-import { useApp } from "@/lib/store";
+import { useApp, type ViewName } from "@/lib/store";
 import { useLiveSettings } from "@/components/use-live-settings";
 import { imgSrc } from "@/components/shared";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 
-const TABS = [
+const TABS: { name: ViewName; label: string; icon: typeof Compass; roles: string[] | null }[] = [
   { name: "discover", label: "Discover", icon: Compass, roles: null },
-  { name: "browse", label: "Browse", icon: LayoutGrid, roles: null },
+  { name: "magazines", label: "Magazines", icon: LibraryBig, roles: null },
   { name: "saved", label: "Saved", icon: Bookmark, roles: null },
   { name: "alerts", label: "Alerts", icon: Bell, roles: null },
   { name: "profile", label: "Profile", icon: UserRound, roles: null },
@@ -45,7 +45,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const visible = TABS.filter((t) => !t.roles || (user?.role && t.roles.includes(user.role)));
   const appName = settings?.app_name || "Pigeon Press";
-  const showBack = (current.name === "magazine" || current.name === "page") && stack.length > 1;
+  const showBack = (current.name === "magazine" || current.name === "edition" || current.name === "page") && stack.length > 1;
+  const backLabel =
+    current.name === "magazine" ? "Magazine" : current.name === "edition" ? "Edition" : current.params?.title || "Page";
 
   const go = (name: (typeof TABS)[number]["name"]) => replace({ name });
 
@@ -78,9 +80,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               initial={{ opacity: 0, scale: 0.85 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.6, ease: "easeOut" }}
-              className="flex flex-col items-center gap-4"
+              className="flex"
               style={{
-                alignItems:
+                justifyContent:
                   settings?.splash_logo_position === "left"
                     ? "flex-start"
                     : settings?.splash_logo_position === "right"
@@ -101,14 +103,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         : 104,
                 }}
               />
-              <motion.p
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.25 }}
-                className="text-white/90 text-lg font-semibold tracking-wide"
-              >
-                {appName}
-              </motion.p>
             </motion.div>
           </motion.div>
         )}
@@ -142,11 +136,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               />
             )}
             <span className={cn("truncate font-semibold text-black", showBack ? "text-base" : "text-lg")}>
-              {showBack
-                ? current.name === "magazine"
-                  ? "Magazine"
-                  : current.params?.title || "Page"
-                : appName}
+              {showBack ? backLabel : appName}
             </span>
           </div>
           <div className="ml-auto flex items-center gap-1.5">

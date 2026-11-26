@@ -28,13 +28,9 @@ export async function GET() {
           createdAt: pub.createdAt,
           magazines: pub.magazines.map((m) => ({
             id: m.id,
-            title: m.title,
+            name: m.name,
             description: m.description,
-            status: m.status,
-            featured: m.featured,
-            rejectionReason: m.rejectionReason,
-            coverImageId: m.coverImageId,
-            flipbookUrl: m.flipbookUrl,
+            logoImageId: m.logoImageId,
             frequency: m.frequency,
             category: m.category ? { id: m.category.id, name: m.category.name } : null,
             editionsCount: m._count.editions,
@@ -45,7 +41,7 @@ export async function GET() {
   );
 }
 
-/** PATCH /api/publishers/me — update company profile (only while pending, or info edits). */
+/** PATCH /api/publishers/me — update the company profile. */
 export async function PATCH(req: NextRequest) {
   const { user, res } = await auth(["PUBLISHER"]);
   if (res) return res;

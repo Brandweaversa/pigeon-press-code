@@ -1,7 +1,11 @@
 // Pigeon Press — magazine platform schema
-// Portable: works on SQLite (development) and MySQL (production on cPanel).
-// No enums / Json / native types are used on purpose so the provider can be
-// switched to "mysql" without changing a single line.
+// MySQL (production on cPanel). No enums / Json / native types are used on
+// purpose so the provider can be switched to "sqlite" for local dev without
+// changing a single line.
+//
+// Moderation model: only PUBLISHERS are approved/rejected. Content from an
+// approved publisher is live immediately — magazines and editions carry no
+// status of their own; visibility always derives from publisher.status.
 
 generator client {
   provider = "prisma-client-js"
@@ -9,7 +13,7 @@ generator client {
 
 datasource db {
   provider = "mysql"
-  url      = env("DATABASE_URL")
+  url      = env("PIGEON_DATABASE_URL")
 }
 
 model User {
@@ -31,51 +35,46 @@ model Publisher {
   user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName     String
   contactEmail    String
-  about           String?
+  about           String?    @db.Text
   logoImageId     String?
   status          String     @default("PENDING") // PENDING | APPROVED | REJECTED
-  rejectionReason String?
+  rejectionReason String?    @db.Text
   createdAt       DateTime   @default(now())
 
   magazines Magazine[]
 }
 
 model Magazine {
-  id              String     @id @default(cuid())
-  publisherId     String
-  publisher       Publisher  @relation(fields: [publisherId], references: [id], onDelete: Cascade)
-  title           String
-  description     String?
-  categoryId      String?
-  category        Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  coverImageId    String
-  flipbookUrl     String
-  language        String     @default("English")
-  frequency       String? // Weekly / Monthly / Quarterly ...
-  website         String?
-  status          String     @default("DRAFT") // DRAFT | PENDING | APPROVED | REJECTED
-  featured        Boolean    @default(false)
-  rejectionReason String?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  id          String     @id @default(cuid())
+  publisherId String
+  publisher   Publisher  @relation(fields: [publisherId], references: [id], onDelete: Cascade)
+  name        String
+  description String?    @db.Text
+  categoryId  String?
+  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  logoImageId String
+  frequency   String? // Weekly / Monthly / Quarterly ...
+  featured    Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   editions   Edition[]
   favourites Favourite[]
 }
 
 model Edition {
-  id              String    @id @default(cuid())
-  magazineId      String
-  magazine        Magazine  @relation(fields: [magazineId], references: [id], onDelete: Cascade)
-  title           String
-  issueNumber     String?
-  description     String?
-  flipbookUrl     String
-  coverImageId    String?
-  status          String    @default("PENDING") // PENDING | APPROVED | REJECTED
-  rejectionReason String?
-  publishedAt     DateTime?
-  createdAt       DateTime  @default(now())
+  id               String   @id @default(cuid())
+  magazineId       String
+  magazine         Magazine @relation(fields: [magazineId], references: [id], onDelete: Cascade)
+  title            String
+  issueNumber      String?
+  flipbookUrl      String     @db.Text
+  thumbnailImageId String
+  sortOrder        Int      @default(0) // display order to readers, managed by the publisher
+  publishedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  @@index([magazineId, sortOrder])
 }
 
 model Category {
@@ -103,7 +102,7 @@ model Notification {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
-  body      String
+  body      String   @db.Text
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 }
@@ -127,6 +126,6 @@ model Setting {
 model Page {
   slug      String   @id // terms | privacy
   title     String
-  content   String
+  content   String   @db.Text
   updatedAt DateTime @updatedAt
 }

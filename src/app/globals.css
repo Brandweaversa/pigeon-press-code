@@ -135,9 +135,6 @@
   backdrop-filter: blur(18px) saturate(1.4);
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
 }
-.a4 {
-  aspect-ratio: 210 / 297;
-}
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }

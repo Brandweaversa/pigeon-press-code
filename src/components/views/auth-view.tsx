@@ -5,7 +5,7 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Mail, Lock, UserRound, Building2, LogOut, LogIn } from "lucide-react";
-import { api, post, uploadImage } from "@/lib/api";
+import { post } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -181,7 +181,7 @@ export function AuthView() {
                 <Textarea value={about} onChange={(e) => setAbout(e.target.value)} placeholder="Short bio — what do you publish? (optional)" className="bg-white min-h-[72px]" aria-label="About" />
                 <div className="flex items-center gap-3">
                   <UploadButton
-                    kind="logo"
+                    kind="company-logo"
                     accept="image/png"
                     label={logoId ? "Replace logo" : "Logo (transparent PNG)"}
                     onUploaded={(r) => setLogoId(r.id)}

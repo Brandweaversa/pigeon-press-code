@@ -2,11 +2,11 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BookmarkX, BellOff, BookOpen, LogIn } from "lucide-react";
+import { BookmarkX, BellOff, LogIn } from "lucide-react";
 import { api, post, patch } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import { useSession } from "next-auth/react";
-import { MagCard, CoverSkeleton, SectionTitle, EmptyState, fmtDate, imgSrc } from "@/components/shared";
+import { LogoSkeleton, SectionTitle, EmptyState, fmtDate, imgSrc } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
@@ -17,8 +17,8 @@ type Fav = {
   notify: boolean;
   magazine: {
     id: string;
-    title: string;
-    coverImageId: string;
+    name: string;
+    logoImageId: string;
     category?: { id: string; name: string } | null;
     publisher?: { companyName: string } | null;
     latestEdition?: { id: string; title: string; publishedAt?: string | null } | null;
@@ -67,7 +67,7 @@ export function SavedView() {
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-5">
-        {Array.from({ length: 5 }).map((_, i) => <CoverSkeleton key={i} />)}
+        {Array.from({ length: 5 }).map((_, i) => <LogoSkeleton key={i} />)}
       </div>
     );
   }
@@ -77,7 +77,7 @@ export function SavedView() {
         icon={<BookmarkX className="h-6 w-6" />}
         title="Nothing saved yet"
         hint="Tap the bookmark on any magazine to keep it here and get alerts for new editions."
-        action={<Button variant="outline" onClick={() => push({ name: "discover" })}>Discover magazines</Button>}
+        action={<Button variant="outline" onClick={() => push({ name: "discover" })}>Discover editions</Button>}
       />
     );
   }
@@ -88,14 +88,14 @@ export function SavedView() {
       <ul className="space-y-2">
         {favs.map((f) => (
           <li key={f.id} className="flex items-center gap-3 rounded-2xl bg-white/85 p-3 ring-1 ring-black/5">
-            <button onClick={() => push({ name: "magazine", params: { id: f.magazine.id } })} className="shrink-0" aria-label={`Open ${f.magazine.title}`}>
-              <div className="a4 w-12 overflow-hidden rounded-lg ring-1 ring-black/10">
-                <img src={imgSrc(f.magazine.coverImageId, "/icons/icon-192.png")} alt="" className="h-full w-full object-cover" />
+            <button onClick={() => push({ name: "magazine", params: { id: f.magazine.id } })} className="shrink-0" aria-label={`Open ${f.magazine.name}`}>
+              <div className="grid h-12 w-12 place-items-center overflow-hidden rounded-xl bg-muted/60 ring-1 ring-black/10">
+                <img src={imgSrc(f.magazine.logoImageId, "/icons/icon-192.png")} alt="" className="h-full w-full object-contain" />
               </div>
             </button>
             <div className="min-w-0 flex-1">
               <button onClick={() => push({ name: "magazine", params: { id: f.magazine.id } })} className="block max-w-full text-left">
-                <p className="truncate font-semibold text-black">{f.magazine.title}</p>
+                <p className="truncate font-semibold text-black">{f.magazine.name}</p>
                 <p className="truncate text-xs text-black/50">
                   {f.magazine.category?.name || "Magazine"}
                   {f.magazine.latestEdition ? ` · latest: ${f.magazine.latestEdition.title}` : ""}
@@ -107,7 +107,7 @@ export function SavedView() {
                 <BellOff className="h-3.5 w-3.5" />
                 <Switch checked={f.notify} onCheckedChange={() => toggleNotify.mutate(f)} aria-label="Notify about new editions" />
               </label>
-              <Button size="icon" variant="ghost" className="text-black/40 hover:text-red-600" onClick={() => unfav.mutate(f)} aria-label={`Remove ${f.magazine.title}`}>
+              <Button size="icon" variant="ghost" className="text-black/40 hover:text-red-600" onClick={() => unfav.mutate(f)} aria-label={`Remove ${f.magazine.name}`}>
                 <BookmarkX className="h-4 w-4" />
               </Button>
             </div>
@@ -124,7 +124,6 @@ type Notif = { id: string; title: string; body: string; read: boolean; createdAt
 
 export function AlertsView() {
   const { data: session } = useSession();
-  const push = useApp((s) => s.push);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -144,8 +143,8 @@ export function AlertsView() {
       <EmptyState
         icon={<LogIn className="h-6 w-6" />}
         title="Sign in to see alerts"
-        hint="We notify you in-app when a magazine you saved publishes a new edition."
-        action={<Button onClick={() => push({ name: "auth" })}>Sign in</Button>}
+        hint="We notify you in-app when a magazine you saved releases a new edition."
+        action={<Button onClick={() => useApp.getState().push({ name: "auth" })}>Sign in</Button>}
       />
     );
   }

@@ -27,6 +27,17 @@ export function isHttpUrl(u: string) {
   return /^https?:\/\/.+\..+/i.test(u);
 }
 
+/* ---------------- image uploads ---------------- */
+
+export const UPLOAD_KINDS = ["magazine-logo", "edition", "company-logo", "brand-logo", "background", "icon"] as const;
+export type UploadKind = (typeof UPLOAD_KINDS)[number];
+
+/** Which roles may upload which kind of image. Design assets are admin-only. */
+export function canUploadKind(role: string, kind: string): boolean {
+  if (kind === "background" || kind === "icon" || kind === "brand-logo") return role === "ADMIN";
+  return role === "PUBLISHER" || role === "ADMIN"; // magazine-logo, edition, company-logo
+}
+
 export type ImgInfo = { mime: string; width: number | null; height: number | null };
 
 /** Sniff mime + pixel dimensions from the first bytes of an upload. */
@@ -44,7 +55,7 @@ export function sniffImage(buf: Uint8Array): ImgInfo {
       if (buf[i] !== 0xff) { i++; continue; }
       const marker = buf[i + 1];
       const len = (buf[i + 2] << 8) | buf[i + 3];
-      if (marker >= 0xc0 && marker <= 0xc3 && marker !== 0xc1 + 4) {
+      if (marker >= 0xc0 && marker <= 0xc3) {
         const h = (buf[i + 5] << 8) | buf[i + 6];
         const w = (buf[i + 7] << 8) | buf[i + 8];
         return { mime: "image/jpeg", width: w, height: h };

@@ -13,7 +13,7 @@ export async function GET() {
         include: {
           category: true,
           publisher: { select: { companyName: true } },
-          editions: { where: { status: "APPROVED" }, orderBy: { publishedAt: "desc" }, take: 1 },
+          editions: { orderBy: { publishedAt: "desc" }, take: 1 },
         },
       },
     },
@@ -21,21 +21,25 @@ export async function GET() {
   });
   return ok(
     favs.map((f) => ({
-      id: f.id,
-      notify: f.notify,
-      createdAt: f.createdAt,
-      magazine: {
-        id: f.magazine.id,
-        title: f.magazine.title,
-        description: f.magazine.description,
-        coverImageId: f.magazine.coverImageId,
-        category: f.magazine.category ? { id: f.magazine.category.id, name: f.magazine.category.name } : null,
-        publisher: f.magazine.publisher,
-        latestEdition: f.magazine.editions[0]
-          ? { id: f.magazine.editions[0].id, title: f.magazine.editions[0].title, publishedAt: f.magazine.editions[0].publishedAt }
-          : null,
-      },
-    }))
+        id: f.id,
+        notify: f.notify,
+        createdAt: f.createdAt,
+        magazine: {
+          id: f.magazine.id,
+          name: f.magazine.name,
+          description: f.magazine.description,
+          logoImageId: f.magazine.logoImageId,
+          category: f.magazine.category ? { id: f.magazine.category.id, name: f.magazine.category.name } : null,
+          publisher: f.magazine.publisher,
+          latestEdition: f.magazine.editions[0]
+            ? {
+                id: f.magazine.editions[0].id,
+                title: f.magazine.editions[0].title,
+                publishedAt: f.magazine.editions[0].publishedAt,
+              }
+            : null,
+        },
+      }))
   );
 }
 
@@ -45,8 +49,11 @@ export async function POST(req: NextRequest) {
   if (res) return res;
   const body = await req.json();
   const magazineId = String(body.magazineId || "");
-  const mag = await db.magazine.findUnique({ where: { id: magazineId } });
-  if (!mag || mag.status !== "APPROVED") return bad("Magazine not found.", 404);
+  const mag = await db.magazine.findUnique({
+    where: { id: magazineId },
+    include: { publisher: { select: { status: true } } },
+  });
+  if (!mag || mag.publisher.status !== "APPROVED") return bad("Magazine not found.", 404);
 
   const existing = await db.favourite.findUnique({
     where: { userId_magazineId: { userId: user!.id, magazineId } },

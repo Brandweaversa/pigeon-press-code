@@ -1,20 +1,25 @@
-export type SettingsKey =
-  | "app_name"
-  | "primary_color"
-  | "font_family"
-  | "splash_bg_color"
-  | "splash_logo_id"
-  | "splash_logo_size"
-  | "splash_logo_position"
-  | "header_logo_id"
-  | "header_logo_size"
-  | "header_logo_position"
-  | "background_image_id"
-  | "background_position"
-  | "background_size"
-  | "background_parallax"
-  | "background_opacity"
-  | "app_icon_id";
+/** Shared setting keys + defaults — safe to import from client components. */
+
+export const SETTING_KEYS = [
+  "app_name",
+  "primary_color",
+  "font_family",
+  "splash_bg_color",
+  "splash_logo_id",
+  "splash_logo_size",
+  "splash_logo_position",
+  "header_logo_id",
+  "header_logo_size",
+  "header_logo_position",
+  "background_image_id",
+  "background_position",
+  "background_size",
+  "background_parallax",
+  "background_opacity",
+  "app_icon_id",
+] as const;
+
+export type SettingsKey = (typeof SETTING_KEYS)[number];
 
 export const DEFAULT_SETTINGS: Record<SettingsKey, string> = {
   app_name: "Pigeon Press",

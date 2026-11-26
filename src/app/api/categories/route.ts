@@ -6,7 +6,7 @@ import { auth, ok, bad, slugify } from "@/lib/api-helpers";
 export async function GET() {
   const cats = await db.category.findMany({
     orderBy: { sortOrder: "asc" },
-    include: { _count: { select: { magazines: { where: { status: "APPROVED" } } } } },
+    include: { _count: { select: { magazines: { where: { publisher: { status: "APPROVED" } } } } } },
   });
   return ok(
     cats.map((c) => ({ id: c.id, name: c.name, slug: c.slug, sortOrder: c.sortOrder, magazines: c._count.magazines }))
