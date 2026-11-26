@@ -2,16 +2,19 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { ShieldCheck, Check, X, Star, Plus, FileText, Users, BookOpen, Layers, Settings2, Trash2, Pencil } from "lucide-react";
+import { ShieldCheck, Check, X, Star, Plus, FileText, Users, BookOpen, Layers, Settings2, Trash2, Pencil, Eye } from "lucide-react";
 import { api, post, put, patch, del } from "@/lib/api";
 import { imgSrc, SectionTitle, EmptyState, fmtDate } from "@/components/shared";
+import { useApp } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DesignConsole } from "@/components/views/admin-design";
 
 type Queue = {
@@ -26,13 +29,63 @@ type AdminMag = {
 };
 type PageRow = { slug: string; title: string; content: string; updatedAt: string };
 
+type Overview = {
+  publishers: {
+    id: string; companyName: string; contactEmail: string; about?: string | null; logoImageId?: string | null;
+    status: string; rejectionReason?: string | null; email: string; magazines: number; createdAt: string;
+  }[];
+  magazines: {
+    id: string; name: string; logoImageId: string; featured: boolean; frequency?: string | null;
+    publisher: { companyName: string; status: string }; editionsCount: number; readers: number; createdAt: string;
+  }[];
+  editions: {
+    id: string; title: string; issueNumber?: string | null; thumbnailImageId: string; flipbookUrl: string;
+    publishedAt: string; magazine: { id: string; name: string }; publisher: { companyName: string; status: string };
+  }[];
+  readers: { id: string; name: string; email: string; favourites: number; createdAt: string }[];
+  accounts: {
+    id: string; name: string; email: string; role: string; companyName?: string | null;
+    favourites: number; notifications: number; createdAt: string;
+  }[];
+};
+
+const statusStyle: Record<string, string> = {
+  APPROVED: "bg-emerald-100 text-emerald-800",
+  PENDING: "bg-amber-100 text-amber-800",
+  REJECTED: "bg-red-100 text-red-700",
+};
+const roleStyle: Record<string, string> = {
+  ADMIN: "bg-primary/10 text-primary",
+  PUBLISHER: "bg-emerald-100 text-emerald-800",
+  READER: "bg-black/5 text-black/60",
+};
+
+function Badge({ value, style }: { value: string; style: Record<string, string> }) {
+  return (
+    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${style[value] || "bg-black/5 text-black/60"}`}>
+      {value}
+    </span>
+  );
+}
+
 export function AdminView() {
   const qc = useQueryClient();
+  const { data: session } = useSession();
+  const selfId = (session?.user as { id?: string } | undefined)?.id;
+  const openReader = useApp((s) => s.openReader);
   const [rejectTarget, setRejectTarget] = useState<{ id: string; title: string } | null>(null);
+  const [confirm, setConfirm] = useState<{ title: string; body: string; run: () => void } | null>(null);
 
   const { data: q, isLoading } = useQuery({ queryKey: ["admin-queue"], queryFn: () => api<Queue>("/api/admin/queue") });
   const { data: cats } = useQuery({ queryKey: ["categories"], queryFn: () => api<Cat[]>("/api/categories") });
   const { data: allMags } = useQuery({ queryKey: ["magazines", "admin-all"], queryFn: () => api<AdminMag[]>("/api/magazines?scope=all") });
+  const { data: ov } = useQuery({ queryKey: ["admin-overview"], queryFn: () => api<Overview>("/api/admin/overview") });
+
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ["admin-queue"] });
+    qc.invalidateQueries({ queryKey: ["admin-overview"] });
+    qc.invalidateQueries({ queryKey: ["magazines"] });
+  };
 
   const review = useMutation({
     mutationFn: (b: { type: string; id: string; action: string; reason?: string }) => post("/api/admin/review", b),
@@ -40,9 +93,29 @@ export function AdminView() {
       toast.success(
         b.action === "approve" ? "Publisher approved — their content is now live." : b.action === "reject" ? "Rejected with reason." : b.action === "feature" ? "Featured on the Magazines catalogue." : "Removed from featured."
       );
-      qc.invalidateQueries({ queryKey: ["admin-queue"] });
-      qc.invalidateQueries({ queryKey: ["magazines"] });
+      invalidateAll();
     },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const deleteMag = useMutation({
+    mutationFn: (id: string) => del("/api/magazines/" + id),
+    onSuccess: () => { toast.success("Magazine and all its editions deleted."); invalidateAll(); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const deleteEd = useMutation({
+    mutationFn: (id: string) => del("/api/editions/" + id),
+    onSuccess: () => { toast.success("Edition deleted."); invalidateAll(); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const setRole = useMutation({
+    mutationFn: (b: { id: string; role: string }) => patch("/api/admin/users/" + b.id, { role: b.role }),
+    onSuccess: () => { toast.success("Account role updated."); invalidateAll(); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const deleteAccount = useMutation({
+    mutationFn: (id: string) => del("/api/admin/users/" + id),
+    onSuccess: () => { toast.success("Account deleted with all its content."); invalidateAll(); },
     onError: (e) => toast.error((e as Error).message),
   });
 
@@ -78,13 +151,17 @@ export function AdminView() {
           <TabsTrigger value="approvals" className="gap-1.5">
             Approvals {q && q.publishers.length > 0 ? `(${q.publishers.length})` : ""}
           </TabsTrigger>
+          <TabsTrigger value="publishers">All publishers</TabsTrigger>
           <TabsTrigger value="magazines">Magazines</TabsTrigger>
+          <TabsTrigger value="editions">Editions</TabsTrigger>
+          <TabsTrigger value="readers">Readers</TabsTrigger>
+          <TabsTrigger value="accounts">Accounts</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
           <TabsTrigger value="design" className="gap-1.5"><Settings2 className="h-3.5 w-3.5" /> Design</TabsTrigger>
           <TabsTrigger value="pages">Legal pages</TabsTrigger>
         </TabsList>
 
-        {/* ------- approvals: publishers only ------- */}
+        {/* ------- approvals: pending publishers ------- */}
         <TabsContent value="approvals" className="space-y-4">
           <p className="text-sm text-black/55">
             Approved publishers publish magazines and editions instantly — only publisher registrations need review.
@@ -115,6 +192,49 @@ export function AdminView() {
           </section>
         </TabsContent>
 
+        {/* ------- all publishers: full directory with approve / revoke ------- */}
+        <TabsContent value="publishers" className="space-y-3">
+          <p className="text-sm text-black/55">
+            Every publisher on the platform. Revoking an approved publisher immediately hides all of their content.
+          </p>
+          {!ov || ov.publishers.length === 0 ? (
+            <EmptyState icon={<Users className="h-6 w-6" />} title="No publishers yet" hint="Publishers register through the Sign in screen." />
+          ) : (
+            <ul className="space-y-2">
+              {ov.publishers.map((p) => (
+                <li key={p.id} className="flex flex-wrap items-center gap-3 rounded-2xl bg-white/85 p-3 ring-1 ring-black/5">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10">
+                    {p.logoImageId ? <img src={imgSrc(p.logoImageId)} alt="" className="h-full w-full object-contain" /> : <Users className="h-5 w-5 text-primary" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-semibold text-black">{p.companyName}</p>
+                      <Badge value={p.status} style={statusStyle} />
+                    </div>
+                    <p className="truncate text-xs text-black/50">
+                      {p.email} · {p.contactEmail} · {p.magazines} magazine{p.magazines === 1 ? "" : "s"} · registered {fmtDate(p.createdAt)}
+                      {p.status === "REJECTED" && p.rejectionReason ? ` · reason: ${p.rejectionReason}` : ""}
+                    </p>
+                  </div>
+                  {p.status !== "APPROVED" && (
+                    <Button size="sm" className="gap-1 bg-emerald-700 hover:bg-emerald-800" onClick={() => review.mutate({ type: "publisher", id: p.id, action: "approve" })}>
+                      <Check className="h-4 w-4" /> Approve
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-red-700"
+                    onClick={() => setRejectTarget({ id: p.id, title: p.companyName })}
+                  >
+                    <X className="h-4 w-4" /> {p.status === "APPROVED" ? "Revoke" : "Reject"}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </TabsContent>
+
         {/* ------- magazines: feature management (all publishers) ------- */}
         <TabsContent value="magazines">
           {!allMags || allMags.length === 0 ? (
@@ -141,6 +261,157 @@ export function AdminView() {
                   >
                     <Star className={`h-4 w-4 ${m.featured ? "fill-current" : ""}`} /> {m.featured ? "Featured" : "Feature"}
                   </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-black/40 hover:text-red-600"
+                    aria-label={`Delete ${m.name}`}
+                    onClick={() =>
+                      setConfirm({
+                        title: `Delete “${m.name}”?`,
+                        body: "This permanently removes the magazine and every edition in it. Readers lose access immediately.",
+                        run: () => deleteMag.mutate(m.id),
+                      })
+                    }
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </TabsContent>
+
+        {/* ------- all live editions ------- */}
+        <TabsContent value="editions" className="space-y-3">
+          <p className="text-sm text-black/55">Every edition across the platform. “Hidden” means the publisher is not currently approved.</p>
+          {!ov || ov.editions.length === 0 ? (
+            <EmptyState icon={<Layers className="h-6 w-6" />} title="No editions yet" hint="Editions appear here the moment a publisher publishes one." />
+          ) : (
+            <ul className="space-y-2">
+              {ov.editions.map((e) => (
+                <li key={e.id} className="flex flex-wrap items-center gap-3 rounded-2xl bg-white/85 p-3 ring-1 ring-black/5">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-muted/60 ring-1 ring-black/10">
+                    <img src={imgSrc(e.thumbnailImageId, "/icons/icon-192.png")} alt="" className="h-full w-full object-cover" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-semibold text-black">{e.title}</p>
+                      <Badge value={e.publisher.status === "APPROVED" ? "LIVE" : "HIDDEN"} style={{ LIVE: "bg-emerald-100 text-emerald-800", HIDDEN: "bg-amber-100 text-amber-800" }} />
+                    </div>
+                    <p className="truncate text-xs text-black/50">
+                      {e.magazine.name} · {e.publisher.companyName}
+                      {e.issueNumber ? ` · issue ${e.issueNumber}` : ""} · published {fmtDate(e.publishedAt)}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    onClick={() => openReader({ url: e.flipbookUrl, title: e.title, magazine: e.magazine.name })}
+                  >
+                    <Eye className="h-4 w-4" /> Open
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-black/40 hover:text-red-600"
+                    aria-label={`Delete ${e.title}`}
+                    onClick={() =>
+                      setConfirm({
+                        title: `Delete edition “${e.title}”?`,
+                        body: "This permanently removes the edition from the magazine and from every reader's feed.",
+                        run: () => deleteEd.mutate(e.id),
+                      })
+                    }
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </TabsContent>
+
+        {/* ------- registered readers ------- */}
+        <TabsContent value="readers">
+          {!ov || ov.readers.length === 0 ? (
+            <EmptyState icon={<Users className="h-6 w-6" />} title="No registered readers yet" hint="Readers appear here as soon as they create accounts." />
+          ) : (
+            <ul className="divide-y divide-black/5 overflow-hidden rounded-2xl bg-white/85 ring-1 ring-black/5">
+              {ov.readers.map((r) => (
+                <li key={r.id} className="flex items-center gap-3 px-4 py-3">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/10 font-bold text-primary">
+                    {(r.name || "R").slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-black">{r.name}</p>
+                    <p className="truncate text-xs text-black/50">{r.email}</p>
+                  </div>
+                  <span className="shrink-0 text-xs text-black/45">{r.favourites} saved</span>
+                  <span className="hidden shrink-0 text-xs text-black/45 sm:block">joined {fmtDate(r.createdAt)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </TabsContent>
+
+        {/* ------- all accounts ------- */}
+        <TabsContent value="accounts" className="space-y-3">
+          <p className="text-sm text-black/55">
+            Every account on the platform. Changing a role takes effect on the person's next sign-in. Deleting an account removes their publisher profile, magazines, editions and favourites.
+          </p>
+          {!ov || ov.accounts.length === 0 ? (
+            <EmptyState icon={<ShieldCheck className="h-6 w-6" />} title="No accounts yet" />
+          ) : (
+            <ul className="space-y-2">
+              {ov.accounts.map((a) => (
+                <li key={a.id} className="flex flex-wrap items-center gap-3 rounded-2xl bg-white/85 p-3 ring-1 ring-black/5">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground font-bold uppercase">
+                    {(a.name || "U").slice(0, 1)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-semibold text-black">{a.name}</p>
+                      <Badge value={a.role} style={roleStyle} />
+                    </div>
+                    <p className="truncate text-xs text-black/50">
+                      {a.email}
+                      {a.companyName ? ` · ${a.companyName}` : ""} · {a.favourites} saved · joined {fmtDate(a.createdAt)}
+                    </p>
+                  </div>
+                  <Select
+                    value={a.role}
+                    onValueChange={(v) => setRole.mutate({ id: a.id, role: v })}
+                    disabled={a.id === selfId}
+                  >
+                    <SelectTrigger className="h-8 w-[120px] bg-white" aria-label={`Role for ${a.name}`}>
+                      <SelectValue placeholder="Role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["READER", "PUBLISHER", "ADMIN"].map((r) => (
+                        <SelectItem key={r} value={r}>{r}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-black/40 hover:text-red-600"
+                    aria-label={`Delete account ${a.name}`}
+                    disabled={a.id === selfId}
+                    onClick={() =>
+                      setConfirm({
+                        title: `Delete ${a.name}'s account?`,
+                        body: a.role === "PUBLISHER"
+                          ? "This permanently removes the account and everything published under it: the publisher profile, all magazines and all editions."
+                          : "This permanently removes the account, their saved magazines and their notifications.",
+                        run: () => deleteAccount.mutate(a.id),
+                      })
+                    }
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -164,7 +435,32 @@ export function AdminView() {
       </Tabs>
 
       <RejectDialog target={rejectTarget} onClose={() => setRejectTarget(null)} onConfirm={(reason) => review.mutate({ type: "publisher", id: rejectTarget!.id, action: "reject", reason })} />
+      <ConfirmDialog target={confirm} onClose={() => setConfirm(null)} />
     </div>
+  );
+}
+
+function ConfirmDialog({
+  target, onClose,
+}: {
+  target: { title: string; body: string; run: () => void } | null;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open={!!target} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{target?.title}</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-black/65">{target?.body}</p>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" onClick={() => { target?.run(); onClose(); }}>
+            Yes, delete
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

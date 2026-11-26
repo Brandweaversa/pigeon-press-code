@@ -80,6 +80,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
   }
 
+  // Notify every admin so the platform side can follow what goes live. The
+  // edition is already created, so a notification failure must not fail it.
+  try {
+    const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
+    if (admins.length) {
+      await db.notification.createMany({
+        data: admins.map((a) => ({
+          userId: a.id,
+          title: `Edition live: ${mag.name}`,
+          body: `${ed.title}${ed.issueNumber ? ` (${ed.issueNumber})` : ""} was published by ${mag.publisher.companyName} and is now visible to readers.`,
+        })),
+      });
+    }
+  } catch {
+    // non-critical
+  }
+
   return ok({ id: ed.id }, 201);
 }
 

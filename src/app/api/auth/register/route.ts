@@ -49,6 +49,25 @@ export async function POST(req: NextRequest) {
       { isolationLevel: "Serializable" }
     );
 
+    // Notify every admin when a new publisher needs review. Never let a
+    // notification failure fail the registration itself.
+    if (user.role === "PUBLISHER") {
+      try {
+        const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
+        if (admins.length) {
+          await db.notification.createMany({
+            data: admins.map((a) => ({
+              userId: a.id,
+              title: "Publisher awaiting approval",
+              body: `${String(body.companyName).trim()} registered as a publisher — review it in Admin → Approvals.`,
+            })),
+          });
+        }
+      } catch {
+        // non-critical
+      }
+    }
+
     return ok({ id: user.id, email: user.email, role: user.role }, 201);
   } catch {
     return bad("Could not create the account. Please try again.", 500);

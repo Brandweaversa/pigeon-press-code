@@ -35,6 +35,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t);
   }, []);
 
+  // Keep the header from covering content: never restore a stale scroll
+  // position on reload, and start every view at the top of the page.
+  useEffect(() => {
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    window.scrollTo(0, 0);
+  }, [current]);
+
   const { data: notif } = useQuery({
     queryKey: ["notifications"],
     queryFn: () => api<{ unread: number; items: { id: string }[] }>("/api/notifications"),
