@@ -2,6 +2,32 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { auth, ok, bad } from "@/lib/api-helpers";
 
+/** A publisher profile is complete once every field the platform needs for
+ *  review is filled in: company name, contact email, about and logo.
+ *  Profiles stay PENDING until complete; admins are notified the moment a
+ *  profile becomes complete. */
+function isProfileComplete(p: { companyName: string; contactEmail: string; about: string | null; logoImageId: string | null }): boolean {
+  return p.companyName.trim().length >= 2 && !!p.contactEmail.trim() && !!p.about?.trim() && !!p.logoImageId;
+}
+
+/** Tell every admin a profile just became complete and is ready to approve.
+ *  Never let a notification failure fail the save itself. */
+async function notifyAdminsProfileComplete(pub: { companyName: string }) {
+  try {
+    const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
+    if (!admins.length) return;
+    await db.notification.createMany({
+      data: admins.map((a) => ({
+        userId: a.id,
+        title: "Publisher profile ready for review",
+        body: `${pub.companyName} has completed their publisher profile — review it in Admin → Approvals.`,
+      })),
+    });
+  } catch {
+    // non-critical
+  }
+}
+
 /** GET /api/publishers/me — the signed-in publisher's company + magazines. */
 export async function GET() {
   const { user, res } = await auth(["PUBLISHER", "ADMIN"]);
@@ -64,6 +90,8 @@ export async function POST(req: NextRequest) {
       status: "PENDING",
     },
   });
+  // A complete profile submitted through the setup form is ready for review.
+  if (isProfileComplete(created)) await notifyAdminsProfileComplete(created);
   return ok({ id: created.id, status: created.status });
 }
 
@@ -85,6 +113,9 @@ export async function PATCH(req: NextRequest) {
   if (body.about !== undefined) data.about = String(body.about).trim() || null;
   if (body.logoImageId !== undefined) data.logoImageId = body.logoImageId ? String(body.logoImageId) : null;
 
+  const wasComplete = isProfileComplete(pub);
   const updated = await db.publisher.update({ where: { id: pub.id }, data });
+  // The admins are notified the moment the profile transitions to complete.
+  if (!wasComplete && isProfileComplete(updated)) await notifyAdminsProfileComplete(updated);
   return ok({ id: updated.id, status: updated.status });
 }

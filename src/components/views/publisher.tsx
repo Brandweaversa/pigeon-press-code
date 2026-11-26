@@ -38,6 +38,17 @@ type Me = {
   status: string; rejectionReason?: string | null;
   magazines: MyMag[];
 };
+
+/** Fields the platform team needs before a publisher profile can be approved.
+ *  The profile stays pending until everything is filled in. */
+function missingProfileFields(p: { companyName?: string | null; contactEmail?: string | null; about?: string | null; logoImageId?: string | null }): string[] {
+  const missing: string[] = [];
+  if (!p.companyName || p.companyName.trim().length < 2) missing.push("company name");
+  if (!p.contactEmail || !p.contactEmail.trim()) missing.push("contact email");
+  if (!p.about || !p.about.trim()) missing.push("about");
+  if (!p.logoImageId) missing.push("logo");
+  return missing;
+}
 type MyEdition = {
   id: string; title: string; issueNumber?: string | null; thumbnailImageId: string;
   flipbookUrl: string; sortOrder: number; publishedAt?: string | null;
@@ -111,11 +122,17 @@ export function PublisherView() {
             </div>
             <p className="text-sm text-black/55">{me.contactEmail}</p>
             {me.about ? <p className="mt-1 text-sm text-black/65">{me.about}</p> : null}
-            {me.status === "PENDING" && (
-              <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-600/20">
-                Your registration is awaiting platform approval. You will get an alert as soon as it is reviewed.
-              </p>
-            )}
+            {me.status === "PENDING" &&
+              (missingProfileFields(me).length > 0 ? (
+                <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-600/20">
+                  Your profile is incomplete — still missing: <span className="font-semibold">{missingProfileFields(me).join(", ")}</span>.
+                  Click Edit and fill everything in; the platform team is notified the moment your profile is complete, and you go live once approved.
+                </p>
+              ) : (
+                <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-600/20">
+                  Your profile is complete and awaiting platform approval. You will get an alert as soon as it is reviewed.
+                </p>
+              ))}
             {me.status === "REJECTED" && me.rejectionReason && (
               <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-900 ring-1 ring-inset ring-red-600/20">
                 Registration was not approved: {me.rejectionReason}
@@ -237,19 +254,22 @@ export function PublisherView() {
 
 function PublisherSetup({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
+  const { data: session } = useSession();
   const [companyName, setCompanyName] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
+  const [contactEmail, setContactEmail] = useState(session?.user?.email || "");
   const [about, setAbout] = useState("");
   const [logoId, setLogoId] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const complete = companyName.trim().length >= 2 && !!contactEmail.trim() && !!about.trim() && !!logoId;
+
   const create = async () => {
     setBusy(true);
     try {
-      await withBusy("Creating profile…", () =>
+      await withBusy("Submitting…", () =>
         post("/api/publishers/me", { companyName, contactEmail, about, logoImageId: logoId || null })
       );
-      toast.success("Publisher profile created — awaiting platform approval.");
+      toast.success("Profile submitted — the platform team has been notified and will review it.");
       qc.invalidateQueries({ queryKey: ["publisher-me"] });
     } catch (e) {
       toast.error((e as Error).message);
@@ -264,6 +284,9 @@ function PublisherSetup({ open, onClose }: { open: boolean; onClose: () => void 
         <DialogHeader>
           <DialogTitle>Set up your publisher profile</DialogTitle>
         </DialogHeader>
+        <p className="-mt-1 text-sm text-black/60">
+          All fields are required. Your profile stays pending until everything is filled in — the platform team is notified the moment it is complete, then approves you.
+        </p>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>Company / publication name</Label>
@@ -271,11 +294,11 @@ function PublisherSetup({ open, onClose }: { open: boolean; onClose: () => void 
           </div>
           <div className="space-y-1.5">
             <Label>Contact email</Label>
-            <Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="Shown on your magazine pages (optional)" className="bg-white" />
+            <Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="Shown on your magazine pages" className="bg-white" />
           </div>
           <div className="space-y-1.5">
             <Label>About</Label>
-            <Textarea value={about} onChange={(e) => setAbout(e.target.value)} placeholder="Short bio — what do you publish? (optional)" className="bg-white min-h-[72px]" />
+            <Textarea value={about} onChange={(e) => setAbout(e.target.value)} placeholder="Short bio — what do you publish?" className="bg-white min-h-[72px]" />
           </div>
           <div className="space-y-1.5">
             <Label>Logo (transparent PNG, max 2 MB)</Label>
@@ -287,8 +310,8 @@ function PublisherSetup({ open, onClose }: { open: boolean; onClose: () => void 
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Later</Button>
-          <Button onClick={create} disabled={busy || companyName.trim().length < 2}>
-            {busy ? "Saving…" : "Create profile"}
+          <Button onClick={create} disabled={busy || !complete}>
+            {busy ? "Submitting…" : "Submit for approval"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -318,6 +341,9 @@ function CompanyDialog({ me, onClose, onSaved }: { me: Me; onClose: () => void; 
         <DialogHeader>
           <DialogTitle>Company / publication profile</DialogTitle>
         </DialogHeader>
+        <p className="-mt-1 text-xs text-black/55">
+          About and logo are required before the platform team can approve you. They are notified the moment your profile is complete.
+        </p>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>Name</Label>
@@ -328,11 +354,11 @@ function CompanyDialog({ me, onClose, onSaved }: { me: Me; onClose: () => void; 
             <Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} className="bg-white" />
           </div>
           <div className="space-y-1.5">
-            <Label>About</Label>
+            <Label>About <span className="font-normal text-black/40">(required for approval)</span></Label>
             <Textarea value={about} onChange={(e) => setAbout(e.target.value)} className="bg-white min-h-[80px]" />
           </div>
           <div className="space-y-1.5">
-            <Label>Logo (transparent PNG, max 2 MB)</Label>
+            <Label>Logo (transparent PNG, max 2 MB) <span className="font-normal text-black/40">(required for approval)</span></Label>
             <div className="flex items-center gap-3">
               <UploadButton kind="company-logo" accept="image/png" label={logoId ? "Replace logo" : "Upload logo"} onUploaded={(r) => setLogoId(r.id)} />
               {logoId ? <img src={imgSrc(logoId)} alt="logo" className="h-10 w-10 object-contain" /> : null}

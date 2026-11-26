@@ -61,6 +61,17 @@ const roleStyle: Record<string, string> = {
   READER: "bg-black/5 text-black/60",
 };
 
+/** Fields a publisher must fill in before their profile counts as complete.
+ *  Profiles stay pending until complete; admins are notified when one is. */
+function missingProfileFields(p: { companyName?: string | null; contactEmail?: string | null; about?: string | null; logoImageId?: string | null }): string[] {
+  const missing: string[] = [];
+  if (!p.companyName || p.companyName.trim().length < 2) missing.push("company name");
+  if (!p.contactEmail || !p.contactEmail.trim()) missing.push("contact email");
+  if (!p.about || !p.about.trim()) missing.push("about");
+  if (!p.logoImageId) missing.push("logo");
+  return missing;
+}
+
 function Badge({ value, style }: { value: string; style: Record<string, string> }) {
   return (
     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${style[value] || "bg-black/5 text-black/60"}`}>
@@ -166,7 +177,7 @@ export function AdminView() {
         {/* ------- approvals: pending publishers ------- */}
         <TabsContent value="approvals" className="space-y-4">
           <p className="text-sm text-black/55">
-            Approved publishers publish magazines and editions instantly — only publisher registrations need review.
+            Publisher profiles stay pending until all details are filled in — you are notified the moment one is complete and ready to approve.
           </p>
           <section>
             <h3 className="mb-2 font-bold text-black">Publisher registrations</h3>
@@ -181,8 +192,26 @@ export function AdminView() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold text-black">{p.companyName}</p>
                     <p className="truncate text-xs text-black/55">{p.email} · {p.contactEmail}{p.about ? ` · ${p.about}` : ""}</p>
+                    {missingProfileFields(p).length > 0 && (
+                      <p className="mt-0.5 text-xs font-semibold text-amber-700">Incomplete — still missing: {missingProfileFields(p).join(", ")}</p>
+                    )}
                   </div>
-                  <Button size="sm" className="gap-1 bg-emerald-700 hover:bg-emerald-800" onClick={() => review.mutate({ type: "publisher", id: p.id, action: "approve" })}>
+                  <Button
+                    size="sm"
+                    className="gap-1 bg-emerald-700 hover:bg-emerald-800"
+                    onClick={() => {
+                      const missing = missingProfileFields(p);
+                      if (missing.length === 0) {
+                        review.mutate({ type: "publisher", id: p.id, action: "approve" });
+                      } else {
+                        setConfirm({
+                          title: `Approve “${p.companyName}” with an incomplete profile?`,
+                          body: `Still missing: ${missing.join(", ")}. You can approve anyway, but their public profile will look unfinished.`,
+                          run: () => review.mutate({ type: "publisher", id: p.id, action: "approve" }),
+                        });
+                      }
+                    }}
+                  >
                     <Check className="h-4 w-4" /> Approve
                   </Button>
                   <Button size="sm" variant="outline" className="gap-1 text-red-700" onClick={() => setRejectTarget({ id: p.id, title: p.companyName })}>
@@ -212,14 +241,36 @@ export function AdminView() {
                     <div className="flex items-center gap-2">
                       <p className="truncate font-semibold text-black">{p.companyName}</p>
                       <Badge value={p.status} style={statusStyle} />
+                      {p.status !== "APPROVED" && (
+                        <Badge
+                          value={missingProfileFields(p).length > 0 ? "INCOMPLETE" : "COMPLETE"}
+                          style={{ COMPLETE: "bg-emerald-100 text-emerald-800", INCOMPLETE: "bg-amber-100 text-amber-800" }}
+                        />
+                      )}
                     </div>
                     <p className="truncate text-xs text-black/50">
                       {p.email} · {p.contactEmail} · {p.magazines} magazine{p.magazines === 1 ? "" : "s"} · registered {fmtDate(p.createdAt)}
                       {p.status === "REJECTED" && p.rejectionReason ? ` · reason: ${p.rejectionReason}` : ""}
+                      {p.status !== "APPROVED" && missingProfileFields(p).length > 0 ? ` · missing: ${missingProfileFields(p).join(", ")}` : ""}
                     </p>
                   </div>
                   {p.status !== "APPROVED" && (
-                    <Button size="sm" className="gap-1 bg-emerald-700 hover:bg-emerald-800" onClick={() => review.mutate({ type: "publisher", id: p.id, action: "approve" })}>
+                    <Button
+                      size="sm"
+                      className="gap-1 bg-emerald-700 hover:bg-emerald-800"
+                      onClick={() => {
+                        const missing = missingProfileFields(p);
+                        if (missing.length === 0) {
+                          review.mutate({ type: "publisher", id: p.id, action: "approve" });
+                        } else {
+                          setConfirm({
+                            title: `Approve “${p.companyName}” with an incomplete profile?`,
+                            body: `Still missing: ${missing.join(", ")}. You can approve anyway, but their public profile will look unfinished.`,
+                            run: () => review.mutate({ type: "publisher", id: p.id, action: "approve" }),
+                          });
+                        }
+                      }}
+                    >
                       <Check className="h-4 w-4" /> Approve
                     </Button>
                   )}
