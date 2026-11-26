@@ -32,7 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [splash, setSplash] = useState(true);
 
   useEffect(() => {
-    const t = setTimeout(() => setSplash(false), 1400);
+    const t = setTimeout(() => setSplash(false), 4000);
     return () => clearTimeout(t);
   }, []);
 
@@ -98,19 +98,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       : "center",
               }}
             >
-              <img
-                src={imgSrc(settings?.splash_logo_id, "/icons/logo-mark.png")}
-                alt="logo"
-                className="object-contain"
-                style={{
-                  width:
-                    settings?.splash_logo_size === "small"
-                      ? 64
-                      : settings?.splash_logo_size === "large"
-                        ? 160
-                        : 104,
-                }}
-              />
+              {settings && (
+                <img
+                  src={imgSrc(settings.splash_logo_id, "/icons/logo-mark.png")}
+                  alt="logo"
+                  className="object-contain"
+                  style={{
+                    width:
+                      settings.splash_logo_size === "small"
+                        ? 64
+                        : settings.splash_logo_size === "large"
+                          ? 160
+                          : 104,
+                  }}
+                />
+              )}
             </motion.div>
           </motion.div>
         )}
