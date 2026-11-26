@@ -1,0 +1,132 @@
+// Pigeon Press — magazine platform schema
+// Portable: works on SQLite (development) and MySQL (production on cPanel).
+// No enums / Json / native types are used on purpose so the provider can be
+// switched to "mysql" without changing a single line.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  name         String
+  role         String        @default("READER") // READER | PUBLISHER | ADMIN
+  createdAt    DateTime      @default(now())
+
+  publisher     Publisher?
+  favourites    Favourite[]
+  notifications Notification[]
+}
+
+model Publisher {
+  id              String     @id @default(cuid())
+  userId          String     @unique
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName     String
+  contactEmail    String
+  about           String?
+  logoImageId     String?
+  status          String     @default("PENDING") // PENDING | APPROVED | REJECTED
+  rejectionReason String?
+  createdAt       DateTime   @default(now())
+
+  magazines Magazine[]
+}
+
+model Magazine {
+  id              String     @id @default(cuid())
+  publisherId     String
+  publisher       Publisher  @relation(fields: [publisherId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  categoryId      String?
+  category        Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  coverImageId    String
+  flipbookUrl     String
+  language        String     @default("English")
+  frequency       String? // Weekly / Monthly / Quarterly ...
+  website         String?
+  status          String     @default("DRAFT") // DRAFT | PENDING | APPROVED | REJECTED
+  featured        Boolean    @default(false)
+  rejectionReason String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  editions   Edition[]
+  favourites Favourite[]
+}
+
+model Edition {
+  id              String    @id @default(cuid())
+  magazineId      String
+  magazine        Magazine  @relation(fields: [magazineId], references: [id], onDelete: Cascade)
+  title           String
+  issueNumber     String?
+  description     String?
+  flipbookUrl     String
+  coverImageId    String?
+  status          String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  rejectionReason String?
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  slug      String     @unique
+  sortOrder Int        @default(0)
+  magazines Magazine[]
+}
+
+model Favourite {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  magazineId String
+  magazine   Magazine @relation(fields: [magazineId], references: [id], onDelete: Cascade)
+  notify     Boolean  @default(true) // receive notifications on new editions
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, magazineId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Image {
+  id        String   @id @default(cuid())
+  kind      String // cover | logo | background | icon | edition
+  mime      String
+  size      Int
+  width     Int?
+  height    Int?
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+model Page {
+  slug      String   @id // terms | privacy
+  title     String
+  content   String
+  updatedAt DateTime @updatedAt
+}
