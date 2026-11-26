@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { useApp, type ViewName } from "@/lib/store";
 import { useLiveSettings } from "@/components/use-live-settings";
 import { imgSrc } from "@/components/shared";
+import { BusyOverlay } from "@/components/ui/busy-overlay";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 
@@ -285,6 +286,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* busy glass overlay (Saving… / Deleting… / …) */}
+      <BusyOverlay />
     </div>
   );
 }

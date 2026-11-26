@@ -14,6 +14,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { api, post, patch, del } from "@/lib/api";
+import { withBusy } from "@/lib/busy";
 import { useApp } from "@/lib/store";
 import { useSession } from "next-auth/react";
 import { imgSrc, StatusBadge, SectionTitle, EmptyState, fmtDate } from "@/components/shared";
@@ -210,7 +211,7 @@ export function PublisherView() {
               onClick={async () => {
                 if (!deleteMag) return;
                 try {
-                  await del(`/api/magazines/${deleteMag.id}`);
+                  await withBusy("Deleting magazine…", () => del(`/api/magazines/${deleteMag.id}`));
                   toast.success("Magazine deleted.");
                   invalidate();
                 } catch (e) {
@@ -236,7 +237,7 @@ function CompanyDialog({ me, onClose, onSaved }: { me: Me; onClose: () => void; 
   const [about, setAbout] = useState(me.about || "");
   const [logoId, setLogoId] = useState(me.logoImageId || "");
   const mut = useMutation({
-    mutationFn: () => patch("/api/publishers/me", { companyName, contactEmail, about, logoImageId: logoId || null }),
+    mutationFn: () => withBusy("Saving…", () => patch("/api/publishers/me", { companyName, contactEmail, about, logoImageId: logoId || null })),
     onSuccess: () => {
       toast.success("Company profile saved.");
       onSaved();
@@ -295,19 +296,21 @@ function MagazineDialog({
   const save = async () => {
     setBusy(true);
     try {
-      if (mag) {
-        await patch(`/api/magazines/${mag.id}`, { name, description, categoryId: categoryId || null, frequency, logoImageId: logoId });
-        toast.success("Magazine saved.");
-      } else {
-        await post("/api/magazines", { name, description, categoryId: categoryId || null, frequency, logoImageId: logoId });
-        toast.success(
-          approved
-            ? "Magazine published — it is live on the newsstand. Open Editions to add the first issue."
-            : "Magazine created. It goes live once your publisher account is approved."
-        );
-      }
-      onSaved();
-      onClose();
+      await withBusy(mag ? "Saving magazine…" : "Creating magazine…", async () => {
+        if (mag) {
+          await patch(`/api/magazines/${mag.id}`, { name, description, categoryId: categoryId || null, frequency, logoImageId: logoId });
+          toast.success("Magazine saved.");
+        } else {
+          await post("/api/magazines", { name, description, categoryId: categoryId || null, frequency, logoImageId: logoId });
+          toast.success(
+            approved
+              ? "Magazine published — it is live on the newsstand. Open Editions to add the first issue."
+              : "Magazine created. It goes live once your publisher account is approved."
+          );
+        }
+        onSaved();
+        onClose();
+      });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -410,7 +413,7 @@ function EditionsManager({ mag, onClose, onChanged }: { mag: MyMag; onClose: () 
   );
 
   const reorder = useMutation({
-    mutationFn: (order: string[]) => patch(`/api/magazines/${mag.id}/editions`, { order }),
+    mutationFn: (order: string[]) => withBusy("Saving order…", () => patch(`/api/magazines/${mag.id}/editions`, { order })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["editions", mag.id] });
       onChanged();
@@ -510,7 +513,7 @@ function EditionsManager({ mag, onClose, onChanged }: { mag: MyMag; onClose: () 
               onClick={async () => {
                 if (!deleteEd) return;
                 try {
-                  await del(`/api/editions/${deleteEd.id}`);
+                  await withBusy("Deleting edition…", () => del(`/api/editions/${deleteEd.id}`));
                   toast.success("Edition deleted.");
                   qc.invalidateQueries({ queryKey: ["editions", mag.id] });
                   onChanged();
@@ -585,15 +588,17 @@ function EditionDialog({
   const save = async () => {
     setBusy(true);
     try {
-      if (edition) {
-        await patch(`/api/editions/${edition.id}`, { title, issueNumber: issue, flipbookUrl: url, thumbnailImageId: thumbId });
-        toast.success("Edition updated.");
-      } else {
-        await post(`/api/magazines/${magId}/editions`, { title, issueNumber: issue, flipbookUrl: url, thumbnailImageId: thumbId });
-        toast.success("Edition published — readers who saved this magazine were notified.");
-      }
-      onSaved();
-      onClose();
+      await withBusy(edition ? "Saving edition…" : "Publishing edition…", async () => {
+        if (edition) {
+          await patch(`/api/editions/${edition.id}`, { title, issueNumber: issue, flipbookUrl: url, thumbnailImageId: thumbId });
+          toast.success("Edition updated.");
+        } else {
+          await post(`/api/magazines/${magId}/editions`, { title, issueNumber: issue, flipbookUrl: url, thumbnailImageId: thumbId });
+          toast.success("Edition published — readers who saved this magazine were notified.");
+        }
+        onSaved();
+        onClose();
+      });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {

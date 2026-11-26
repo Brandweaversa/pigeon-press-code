@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { BookmarkX, BellOff, LogIn } from "lucide-react";
 import { api, post, patch } from "@/lib/api";
+import { withBusy } from "@/lib/busy";
 import { useApp } from "@/lib/store";
 import { useSession } from "next-auth/react";
 import { LogoSkeleton, SectionTitle, EmptyState, fmtDate, imgSrc } from "@/components/shared";
@@ -37,7 +38,7 @@ export function SavedView() {
   });
 
   const toggleNotify = useMutation({
-    mutationFn: (f: Fav) => patch<{ notify: boolean }>("/api/favourites", { magazineId: f.magazine.id, notify: !f.notify }),
+    mutationFn: (f: Fav) => withBusy("Updating…", () => patch<{ notify: boolean }>("/api/favourites", { magazineId: f.magazine.id, notify: !f.notify })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["favourites"] });
       toast.success("Notification preference updated.");
@@ -46,7 +47,7 @@ export function SavedView() {
   });
 
   const unfav = useMutation({
-    mutationFn: (f: Fav) => post<{ favourited: boolean }>("/api/favourites", { magazineId: f.magazine.id }),
+    mutationFn: (f: Fav) => withBusy("Removing…", () => post<{ favourited: boolean }>("/api/favourites", { magazineId: f.magazine.id })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["favourites"] });
       toast.success("Removed from saved.");
@@ -134,7 +135,7 @@ export function AlertsView() {
   });
 
   const markAll = useMutation({
-    mutationFn: () => post("/api/notifications", { all: true }),
+    mutationFn: () => withBusy("Updating…", () => post("/api/notifications", { all: true })),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 

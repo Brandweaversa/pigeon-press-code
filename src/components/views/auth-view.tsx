@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Mail, Lock, UserRound, Building2, LogOut, LogIn } from "lucide-react";
 import { post } from "@/lib/api";
+import { withBusy } from "@/lib/busy";
 import { useApp } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,7 +47,7 @@ export function AuthView() {
     e.preventDefault();
     setBusy(true);
     try {
-      const r = await signIn("credentials", { email: siEmail, password: siPass, redirect: false });
+      const r = await withBusy("Signing in…", () => signIn("credentials", { email: siEmail, password: siPass, redirect: false }));
       if (r?.error) throw new Error("Wrong email or password.");
       toast.success("Welcome back!");
       afterAuth();
@@ -61,14 +62,16 @@ export function AuthView() {
     e.preventDefault();
     setBusy(true);
     try {
-      await post("/api/auth/register", {
-        name,
-        email,
-        password: pass,
-        role: regRole,
-        ...(regRole === "PUBLISHER" ? { companyName, contactEmail: contactEmail || email, about, logoImageId: logoId } : {}),
-      });
-      const r = await signIn("credentials", { email, password: pass, redirect: false });
+      await withBusy("Creating account…", () =>
+        post("/api/auth/register", {
+          name,
+          email,
+          password: pass,
+          role: regRole,
+          ...(regRole === "PUBLISHER" ? { companyName, contactEmail: contactEmail || email, about, logoImageId: logoId } : {}),
+        })
+      );
+      const r = await withBusy("Signing in…", () => signIn("credentials", { email, password: pass, redirect: false }));
       if (r?.error) throw new Error("Account created — please sign in.");
       toast.success(
         regRole === "PUBLISHER"
@@ -104,7 +107,7 @@ export function AuthView() {
           variant="outline"
           className="w-full gap-2"
           onClick={async () => {
-            await signOut({ redirect: false });
+            await withBusy("Signing out…", () => signOut({ redirect: false }));
             qc.clear();
             useApp.getState().replace({ name: "discover" });
           }}

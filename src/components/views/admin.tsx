@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { ShieldCheck, Check, X, Star, Plus, FileText, Users, BookOpen, Layers, Settings2, Trash2, Pencil, Eye } from "lucide-react";
 import { api, post, put, patch, del } from "@/lib/api";
+import { withBusy } from "@/lib/busy";
 import { imgSrc, SectionTitle, EmptyState, fmtDate } from "@/components/shared";
 import { useApp } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -88,7 +89,8 @@ export function AdminView() {
   };
 
   const review = useMutation({
-    mutationFn: (b: { type: string; id: string; action: string; reason?: string }) => post("/api/admin/review", b),
+    mutationFn: (b: { type: string; id: string; action: string; reason?: string }) =>
+      withBusy("Updating…", () => post("/api/admin/review", b)),
     onSuccess: (_r, b) => {
       toast.success(
         b.action === "approve" ? "Publisher approved — their content is now live." : b.action === "reject" ? "Rejected with reason." : b.action === "feature" ? "Featured on the Magazines catalogue." : "Removed from featured."
@@ -99,22 +101,22 @@ export function AdminView() {
   });
 
   const deleteMag = useMutation({
-    mutationFn: (id: string) => del("/api/magazines/" + id),
+    mutationFn: (id: string) => withBusy("Deleting magazine…", () => del("/api/magazines/" + id)),
     onSuccess: () => { toast.success("Magazine and all its editions deleted."); invalidateAll(); },
     onError: (e) => toast.error((e as Error).message),
   });
   const deleteEd = useMutation({
-    mutationFn: (id: string) => del("/api/editions/" + id),
+    mutationFn: (id: string) => withBusy("Deleting edition…", () => del("/api/editions/" + id)),
     onSuccess: () => { toast.success("Edition deleted."); invalidateAll(); },
     onError: (e) => toast.error((e as Error).message),
   });
   const setRole = useMutation({
-    mutationFn: (b: { id: string; role: string }) => patch("/api/admin/users/" + b.id, { role: b.role }),
+    mutationFn: (b: { id: string; role: string }) => withBusy("Updating account…", () => patch("/api/admin/users/" + b.id, { role: b.role })),
     onSuccess: () => { toast.success("Account role updated."); invalidateAll(); },
     onError: (e) => toast.error((e as Error).message),
   });
   const deleteAccount = useMutation({
-    mutationFn: (id: string) => del("/api/admin/users/" + id),
+    mutationFn: (id: string) => withBusy("Deleting account…", () => del("/api/admin/users/" + id)),
     onSuccess: () => { toast.success("Account deleted with all its content."); invalidateAll(); },
     onError: (e) => toast.error((e as Error).message),
   });
@@ -499,17 +501,17 @@ function CategoriesAdmin({ cats }: { cats: Cat[] }) {
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
 
   const add = useMutation({
-    mutationFn: () => post("/api/categories", { name }),
+    mutationFn: () => withBusy("Saving…", () => post("/api/categories", { name })),
     onSuccess: () => { toast.success("Category added."); setName(""); qc.invalidateQueries({ queryKey: ["categories"] }); },
     onError: (e) => toast.error((e as Error).message),
   });
   const rename = useMutation({
-    mutationFn: (b: { id: string; name: string }) => patch("/api/categories/" + b.id, { name: b.name }),
+    mutationFn: (b: { id: string; name: string }) => withBusy("Saving…", () => patch("/api/categories/" + b.id, { name: b.name })),
     onSuccess: () => { toast.success("Category renamed."); setEditing(null); qc.invalidateQueries({ queryKey: ["categories"] }); },
     onError: (e) => toast.error((e as Error).message),
   });
   const remove = useMutation({
-    mutationFn: (id: string) => del("/api/categories/" + id),
+    mutationFn: (id: string) => withBusy("Deleting…", () => del("/api/categories/" + id)),
     onSuccess: () => { toast.success("Category deleted."); qc.invalidateQueries({ queryKey: ["categories"] }); },
     onError: (e) => toast.error((e as Error).message),
   });
@@ -569,7 +571,7 @@ function PageEditor({ slug, label, row }: { slug: string; label: string; row?: P
   const t = title ?? row?.title ?? "";
   const c = content ?? row?.content ?? "";
   const save = useMutation({
-    mutationFn: () => put("/api/admin/pages", { slug, title: t, content: c }),
+    mutationFn: () => withBusy("Saving…", () => put("/api/admin/pages", { slug, title: t, content: c })),
     onSuccess: () => {
       toast.success(`${label} saved.`);
       qc.invalidateQueries({ queryKey: ["page", slug] });

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { ImagePlus, Loader2 } from "lucide-react";
 import { uploadImage } from "@/lib/api";
+import { withBusy } from "@/lib/busy";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +36,7 @@ export function UploadButton({
     }
     setBusy(true);
     try {
-      const r = await uploadImage(file, kind);
+      const r = await withBusy("Uploading image…", () => uploadImage(file, kind));
       onUploaded({ id: r.id, url: r.url });
       toast.success("Image uploaded.");
     } catch (e) {

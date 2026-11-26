@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Palette, Type, Image as ImageIcon, MonitorSmartphone } from "lucide-react";
 import { put } from "@/lib/api";
+import { withBusy } from "@/lib/busy";
 import { useLiveSettings } from "@/components/use-live-settings";
 import { UploadButton } from "@/components/upload-button";
 import { imgSrc } from "@/components/shared";
@@ -20,7 +21,7 @@ export function DesignConsole() {
   const qc = useQueryClient();
 
   const save = useMutation({
-    mutationFn: (b: Partial<Record<SettingsKey, string>>) => put("/api/settings", b),
+    mutationFn: (b: Partial<Record<SettingsKey, string>>) => withBusy("Saving design…", () => put("/api/settings", b)),
     onSuccess: (s) => {
       qc.setQueryData(["settings"], s);
       toast.success("Design updated — everyone sees it on their next visit.");

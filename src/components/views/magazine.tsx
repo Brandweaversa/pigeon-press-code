@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Bookmark, BookmarkCheck, BookOpen, Star, CalendarDays, Layers } from "lucide-react";
 import { api, post } from "@/lib/api";
+import { withBusy } from "@/lib/busy";
 import { useApp } from "@/lib/store";
 import { useSession } from "next-auth/react";
 import {
@@ -56,7 +57,7 @@ export function MagazineView({ id }: { id: string }) {
   });
 
   const favMut = useMutation({
-    mutationFn: () => post<{ favourited: boolean }>("/api/favourites", { magazineId: id }),
+    mutationFn: () => withBusy("Updating…", () => post<{ favourited: boolean }>("/api/favourites", { magazineId: id })),
     onSuccess: (r) => {
       toast.success(r.favourited ? "Added to your saved magazines." : "Removed from saved.");
       qc.invalidateQueries({ queryKey: ["magazine", id] });
