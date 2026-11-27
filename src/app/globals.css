@@ -126,12 +126,18 @@
 
 @layer utilities {
   .text-sm {
-    color: #000;
     font-size: 12px;
   }
 
   .text-base {
     font-size: 12px;
+  }
+
+  :is(.bg-primary, .bg-emerald-700, .bg-emerald-800).text-sm,
+  :is(.bg-primary, .bg-emerald-700, .bg-emerald-800) .text-sm,
+  :is(.bg-primary, .bg-emerald-700, .bg-emerald-800).text-base,
+  :is(.bg-primary, .bg-emerald-700, .bg-emerald-800) .text-base {
+    color: white;
   }
 }
 
