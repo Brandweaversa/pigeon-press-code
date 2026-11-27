@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Compass, LibraryBig, Bookmark, Bell, UserRound, BookOpenText, ShieldCheck, X, ChevronLeft, ArrowLeft, ArrowRight } from "lucide-react";
+import { Compass, LibraryBig, Bookmark, Bell, UserRound, BookOpenText, ShieldCheck, X, ChevronLeft } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp, type ViewName } from "@/lib/store";
 import { useLiveSettings } from "@/components/use-live-settings";
@@ -24,7 +24,6 @@ const TABS: { name: ViewName; label: string; icon: typeof Compass; roles: string
 
 type SessionUser = { id?: string; name?: string | null; email?: string | null; role?: string };
 type TouchStart = { x: number; y: number; time: number };
-type SwipeFeedback = { direction: "left" | "right"; label: string; progress: number };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
@@ -32,12 +31,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const settings = useLiveSettings();
   const { current, stack, back, replace, push, reader, closeReader } = useApp();
   const [splash, setSplash] = useState(true);
-  const [swipeFeedback, setSwipeFeedback] = useState<SwipeFeedback | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [swipeAnimating, setSwipeAnimating] = useState(false);
   const touchStart = useRef<TouchStart | null>(null);
+  const swipeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setSplash(false), 4000);
     return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => () => {
+    if (swipeTimer.current) clearTimeout(swipeTimer.current);
   }, []);
 
   // Keep the header from covering content: never restore a stale scroll
@@ -63,6 +68,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const go = (name: (typeof TABS)[number]["name"]) => replace({ name });
 
+  const resetSwipe = () => {
+    setSwipeAnimating(true);
+    setSwipeOffset(0);
+    if (swipeTimer.current) clearTimeout(swipeTimer.current);
+    swipeTimer.current = setTimeout(() => setSwipeAnimating(false), 220);
+  };
+
   const handleTouchStart = (event: React.TouchEvent<HTMLElement>) => {
     const touch = event.touches[0];
     const target = event.target;
@@ -76,10 +88,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       target.closest("button, a, input, textarea, select, [role='button'], iframe")
     ) {
       touchStart.current = null;
-      setSwipeFeedback(null);
       return;
     }
 
+    if (swipeTimer.current) clearTimeout(swipeTimer.current);
+    setSwipeOffset(0);
+    setSwipeAnimating(false);
     touchStart.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
   };
 
@@ -90,46 +104,57 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     const deltaX = touch.clientX - start.x;
     const deltaY = touch.clientY - start.y;
-    if (Math.abs(deltaX) < 12 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) {
-      if (Math.abs(deltaY) > 12) setSwipeFeedback(null);
-      return;
-    }
+    if (Math.abs(deltaX) < 8 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
 
     const currentIndex = visible.findIndex((tab) => tab.name === current.name);
     const nextIndex = currentIndex + (deltaX < 0 ? 1 : -1);
     if (currentIndex < 0 || nextIndex < 0 || nextIndex >= visible.length) {
-      setSwipeFeedback(null);
+      // Give a little elastic resistance at the first and last tab.
+      setSwipeOffset(Math.sign(deltaX) * Math.min(Math.abs(deltaX) * 0.18, 36));
       return;
     }
 
-    setSwipeFeedback({
-      direction: deltaX < 0 ? "left" : "right",
-      label: visible[nextIndex].label,
-      progress: Math.min(Math.abs(deltaX) / 110, 1),
-    });
+    // Track the finger directly so the current screen visibly follows the swipe.
+    setSwipeOffset(Math.max(-window.innerWidth, Math.min(window.innerWidth, deltaX)));
   };
 
   const handleTouchEnd = (event: React.TouchEvent<HTMLElement>) => {
     const start = touchStart.current;
     touchStart.current = null;
-    setSwipeFeedback(null);
     const touch = event.changedTouches[0];
-    if (!start || !touch || splash || reader || window.matchMedia("(min-width: 768px)").matches) return;
+    if (!start || !touch || splash || reader || window.matchMedia("(min-width: 768px)").matches) {
+      resetSwipe();
+      return;
+    }
 
     const deltaX = touch.clientX - start.x;
     const deltaY = touch.clientY - start.y;
     const elapsed = Date.now() - start.time;
-    if (Math.abs(deltaX) < 70 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25 || elapsed > 800) return;
-
     const currentIndex = visible.findIndex((tab) => tab.name === current.name);
     const nextIndex = currentIndex + (deltaX < 0 ? 1 : -1);
-    if (currentIndex >= 0 && nextIndex >= 0 && nextIndex < visible.length) {
-      go(visible[nextIndex].name);
+    const canNavigate = currentIndex >= 0 && nextIndex >= 0 && nextIndex < visible.length;
+    const committed = canNavigate && Math.abs(deltaX) >= 70 && Math.abs(deltaX) >= Math.abs(deltaY) * 1.25 && elapsed <= 800;
+
+    if (!committed) {
+      resetSwipe();
+      return;
     }
+
+    // Finish the drag off-screen, then switch tabs and reset without animating
+    // the incoming screen back from the edge.
+    setSwipeAnimating(true);
+    setSwipeOffset(deltaX < 0 ? -window.innerWidth : window.innerWidth);
+    if (swipeTimer.current) clearTimeout(swipeTimer.current);
+    swipeTimer.current = setTimeout(() => {
+      go(visible[nextIndex].name);
+      setSwipeAnimating(false);
+      setSwipeOffset(0);
+      swipeTimer.current = null;
+    }, 220);
   };
 
   return (
-    <div className="relative min-h-screen flex flex-col">
+    <div className="relative min-h-screen flex flex-col overflow-x-hidden">
       {/* managed background layer */}
       <div
         aria-hidden
@@ -142,34 +167,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           opacity: "var(--bg-opacity)",
         }}
       />
-
-      {/* prominent feedback while swiping between tabs */}
-      <AnimatePresence>
-        {swipeFeedback && (
-          <motion.div
-            key="swipe-feedback"
-            aria-hidden="true"
-            initial={{ opacity: 0, scale: 0.88 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.92 }}
-            transition={{ duration: 0.12 }}
-            className={cn(
-              "pointer-events-none fixed top-1/2 z-[70] flex -translate-y-1/2 flex-col items-center gap-3 rounded-3xl bg-primary px-6 py-5 text-primary-foreground shadow-2xl ring-4 ring-white/80",
-              swipeFeedback.direction === "left" ? "right-5" : "left-5"
-            )}
-            style={{ minWidth: 132, boxShadow: "0 12px 40px rgba(0,0,0,.35)" }}
-          >
-            {swipeFeedback.direction === "left" ? <ArrowRight className="h-9 w-9" strokeWidth={3} /> : <ArrowLeft className="h-9 w-9" strokeWidth={3} />}
-            <span className="text-sm font-extrabold tracking-wide">{swipeFeedback.label}</span>
-            <span className="h-1.5 w-full overflow-hidden rounded-full bg-white/30">
-              <span
-                className="block h-full rounded-full bg-white transition-[width] duration-75"
-                style={{ width: `${Math.max(14, swipeFeedback.progress * 100)}%` }}
-              />
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* splash */}
       <AnimatePresence>
@@ -279,7 +276,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-6xl flex-1">
+      <div className="mx-auto flex w-full max-w-6xl flex-1 overflow-x-hidden">
         {/* desktop rail (mac style) */}
         <nav className="sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 md:flex md:flex-col items-center gap-1 py-4 pl-2 pr-2" aria-label="Main">
           {visible.map((t) => {
@@ -311,11 +308,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* content */}
         <main
           className="min-w-0 flex-1 px-4 pb-28 pt-4 md:pb-10"
-          style={{ touchAction: "pan-y" }}
+          style={{
+            touchAction: "pan-y",
+            transform: `translate3d(${swipeOffset}px, 0, 0)`,
+            transition: swipeAnimating ? "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+            willChange: swipeOffset ? "transform" : undefined,
+          }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          onTouchCancel={() => { touchStart.current = null; setSwipeFeedback(null); }}
+          onTouchCancel={() => {
+            touchStart.current = null;
+            resetSwipe();
+          }}
         >
           {children}
         </main>
