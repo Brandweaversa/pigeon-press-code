@@ -233,7 +233,7 @@ export function StatusBadge({ status }: { status: string }) {
 export function SectionTitle({ children, sub }: { children: React.ReactNode; sub?: string }) {
   return (
     <div className="mb-3">
-      <h2 className="text-xl md:text-2xl font-bold tracking-tight text-black">{children}</h2>
+      <h2 className="text-[2.5rem] md:text-[3rem] font-bold tracking-tight text-black">{children}</h2>
       {sub ? <p className="text-sm text-black/55 mt-0.5">{sub}</p> : null}
     </div>
   );
