@@ -124,6 +124,17 @@
   }
 }
 
+@layer utilities {
+  .text-sm {
+    color: #000;
+    font-size: 12px;
+  }
+
+  .text-base {
+    font-size: 12px;
+  }
+}
+
 /* ---- Pigeon Press helpers (v2) ---- */
 .glass {
   background: color-mix(in srgb, white 72%, transparent);
