@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Compass, LibraryBig, Bookmark, Bell, UserRound, BookOpenText, ShieldCheck, X, ChevronLeft } from "lucide-react";
+import { Compass, LibraryBig, Bookmark, Bell, UserRound, BookOpenText, ShieldCheck, X, ChevronLeft, ArrowLeft, ArrowRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp, type ViewName } from "@/lib/store";
 import { useLiveSettings } from "@/components/use-live-settings";
@@ -24,6 +24,7 @@ const TABS: { name: ViewName; label: string; icon: typeof Compass; roles: string
 
 type SessionUser = { id?: string; name?: string | null; email?: string | null; role?: string };
 type TouchStart = { x: number; y: number; time: number };
+type SwipeFeedback = { direction: "left" | "right"; label: string; progress: number };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
@@ -31,6 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const settings = useLiveSettings();
   const { current, stack, back, replace, push, reader, closeReader } = useApp();
   const [splash, setSplash] = useState(true);
+  const [swipeFeedback, setSwipeFeedback] = useState<SwipeFeedback | null>(null);
   const touchStart = useRef<TouchStart | null>(null);
 
   useEffect(() => {
@@ -74,15 +76,43 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       target.closest("button, a, input, textarea, select, [role='button'], iframe")
     ) {
       touchStart.current = null;
+      setSwipeFeedback(null);
       return;
     }
 
     touchStart.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
   };
 
+  const handleTouchMove = (event: React.TouchEvent<HTMLElement>) => {
+    const start = touchStart.current;
+    const touch = event.touches[0];
+    if (!start || !touch || splash || reader || window.matchMedia("(min-width: 768px)").matches) return;
+
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) < 12 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) {
+      if (Math.abs(deltaY) > 12) setSwipeFeedback(null);
+      return;
+    }
+
+    const currentIndex = visible.findIndex((tab) => tab.name === current.name);
+    const nextIndex = currentIndex + (deltaX < 0 ? 1 : -1);
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= visible.length) {
+      setSwipeFeedback(null);
+      return;
+    }
+
+    setSwipeFeedback({
+      direction: deltaX < 0 ? "left" : "right",
+      label: visible[nextIndex].label,
+      progress: Math.min(Math.abs(deltaX) / 110, 1),
+    });
+  };
+
   const handleTouchEnd = (event: React.TouchEvent<HTMLElement>) => {
     const start = touchStart.current;
     touchStart.current = null;
+    setSwipeFeedback(null);
     const touch = event.changedTouches[0];
     if (!start || !touch || splash || reader || window.matchMedia("(min-width: 768px)").matches) return;
 
@@ -112,6 +142,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           opacity: "var(--bg-opacity)",
         }}
       />
+
+      {/* prominent feedback while swiping between tabs */}
+      <AnimatePresence>
+        {swipeFeedback && (
+          <motion.div
+            key="swipe-feedback"
+            aria-hidden="true"
+            initial={{ opacity: 0, scale: 0.88 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.92 }}
+            transition={{ duration: 0.12 }}
+            className={cn(
+              "pointer-events-none fixed top-1/2 z-[70] flex -translate-y-1/2 flex-col items-center gap-3 rounded-3xl bg-primary px-6 py-5 text-primary-foreground shadow-2xl ring-4 ring-white/80",
+              swipeFeedback.direction === "left" ? "right-5" : "left-5"
+            )}
+            style={{ minWidth: 132, boxShadow: "0 12px 40px rgba(0,0,0,.35)" }}
+          >
+            {swipeFeedback.direction === "left" ? <ArrowRight className="h-9 w-9" strokeWidth={3} /> : <ArrowLeft className="h-9 w-9" strokeWidth={3} />}
+            <span className="text-sm font-extrabold tracking-wide">{swipeFeedback.label}</span>
+            <span className="h-1.5 w-full overflow-hidden rounded-full bg-white/30">
+              <span
+                className="block h-full rounded-full bg-white transition-[width] duration-75"
+                style={{ width: `${Math.max(14, swipeFeedback.progress * 100)}%` }}
+              />
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* splash */}
       <AnimatePresence>
@@ -255,8 +313,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className="min-w-0 flex-1 px-4 pb-28 pt-4 md:pb-10"
           style={{ touchAction: "pan-y" }}
           onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          onTouchCancel={() => { touchStart.current = null; }}
+          onTouchCancel={() => { touchStart.current = null; setSwipeFeedback(null); }}
         >
           {children}
         </main>
