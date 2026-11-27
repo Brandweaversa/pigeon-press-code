@@ -148,7 +148,7 @@
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
 }
 .glass-dark {
-  background: color-mix(in srgb, #10201d 55%, transparent);
+  background: color-mix(in srgb, #10201d 100%, transparent);
   backdrop-filter: blur(18px) saturate(1.4);
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
 }
