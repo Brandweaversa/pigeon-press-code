@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Palette, Type, Image as ImageIcon, MonitorSmartphone } from "lucide-react";
@@ -19,6 +20,12 @@ import type { SettingsKey } from "@/lib/settingsClient";
 export function DesignConsole() {
   const settings = useLiveSettings();
   const qc = useQueryClient();
+  const [opacity, setOpacity] = useState(10);
+
+  useEffect(() => {
+    const savedOpacity = Number(settings?.background_opacity ?? 0.1);
+    setOpacity(Number.isFinite(savedOpacity) ? savedOpacity * 100 : 10);
+  }, [settings?.background_opacity]);
 
   const save = useMutation({
     mutationFn: (b: Partial<Record<SettingsKey, string>>) => withBusy("Saving design…", () => put("/api/settings", b)),
@@ -186,13 +193,14 @@ export function DesignConsole() {
             </Select>
           </Field>
         </div>
-        <Field label={`Opacity — ${Math.round(Number(settings.background_opacity) * 100)}%`}>
+        <Field label={`Opacity — ${Math.round(opacity)}%`}>
           <Slider
-            value={[Number(settings.background_opacity) * 100]}
+            value={[opacity]}
             min={0}
             max={100}
-            step={5}
-            onValueCommit={(v) => save.mutate({ background_opacity: String(v[0] / 100) })}
+            step={1}
+            onValueChange={(values) => setOpacity(values[0] ?? 10)}
+            onValueCommit={(values) => save.mutate({ background_opacity: String((values[0] ?? 10) / 100) })}
             aria-label="Background opacity"
           />
         </Field>
