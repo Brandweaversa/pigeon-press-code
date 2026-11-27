@@ -10,7 +10,7 @@ import { useLiveSettings } from "@/components/use-live-settings";
 import { imgSrc } from "@/components/shared";
 import { BusyOverlay } from "@/components/ui/busy-overlay";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const TABS: { name: ViewName; label: string; icon: typeof Compass; roles: string[] | null }[] = [
   { name: "discover", label: "Discover", icon: Compass, roles: null },
@@ -23,6 +23,7 @@ const TABS: { name: ViewName; label: string; icon: typeof Compass; roles: string
 ] as const;
 
 type SessionUser = { id?: string; name?: string | null; email?: string | null; role?: string };
+type TouchStart = { x: number; y: number; time: number };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
@@ -30,6 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const settings = useLiveSettings();
   const { current, stack, back, replace, push, reader, closeReader } = useApp();
   const [splash, setSplash] = useState(true);
+  const touchStart = useRef<TouchStart | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setSplash(false), 4000);
@@ -58,6 +60,43 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     current.name === "magazine" ? "Magazine" : current.name === "edition" ? "Edition" : current.params?.title || "Page";
 
   const go = (name: (typeof TABS)[number]["name"]) => replace({ name });
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLElement>) => {
+    const touch = event.touches[0];
+    const target = event.target;
+    if (!touch || !(target instanceof Element)) return;
+
+    // Don't hijack gestures on controls, or when viewing a detail/reader screen.
+    if (
+      splash ||
+      reader ||
+      !visible.some((tab) => tab.name === current.name) ||
+      target.closest("button, a, input, textarea, select, [role='button'], iframe")
+    ) {
+      touchStart.current = null;
+      return;
+    }
+
+    touchStart.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLElement>) => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    const touch = event.changedTouches[0];
+    if (!start || !touch || splash || reader || window.matchMedia("(min-width: 768px)").matches) return;
+
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    const elapsed = Date.now() - start.time;
+    if (Math.abs(deltaX) < 70 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25 || elapsed > 800) return;
+
+    const currentIndex = visible.findIndex((tab) => tab.name === current.name);
+    const nextIndex = currentIndex + (deltaX < 0 ? 1 : -1);
+    if (currentIndex >= 0 && nextIndex >= 0 && nextIndex < visible.length) {
+      go(visible[nextIndex].name);
+    }
+  };
 
   return (
     <div className="relative min-h-screen flex flex-col">
@@ -212,7 +251,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* content */}
-        <main className="min-w-0 flex-1 px-4 pb-28 pt-4 md:pb-10">{children}</main>
+        <main
+          className="min-w-0 flex-1 px-4 pb-28 pt-4 md:pb-10"
+          style={{ touchAction: "pan-y" }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={() => { touchStart.current = null; }}
+        >
+          {children}
+        </main>
       </div>
 
       {/* mobile tab bar */}
