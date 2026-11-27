@@ -50,7 +50,7 @@ export function DiscoverView() {
           )}
         </SectionTitle>
         {isLoading ? (
-          <div className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <EditionSkeleton key={i} />
             ))}
@@ -62,7 +62,7 @@ export function DiscoverView() {
             hint={q ? "Try a different search." : "Publishers are setting up their shelves — check back soon."}
           />
         ) : (
-          <div className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
             {(latest || []).map((ed, i) => (
               <EditionCard
                 key={ed.id}
